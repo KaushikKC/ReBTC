@@ -18,131 +18,71 @@ interface IFlashLoanReceiver {
 }
 
 /**
- * @title LstBtcFlashLoan
- * @dev Provides flash loans for lstBTC holders to access instant liquidity
- * Uses an internal liquidity pool and enforces repayment in the same transaction
+ * @title ModifiedLstBtcFlashLoan
+ * @dev Flash loan provider for lstBTC tokens with direct repayment
  */
-contract LstBtcFlashLoan is ReentrancyGuard, Ownable {
-    // The lstBTC token contract
+contract ModifiedLstBtcFlashLoan is ReentrancyGuard, Ownable {
     IERC20 public lstBtcToken;
 
-    // Fee in basis points (e.g., 30 = 0.3%)
-    uint256 public flashLoanFeeInBps = 30;
-
-    // Minimum and maximum flash loan amounts
-    uint256 public minFlashLoanAmount = 0.01 ether; // Assuming 18 decimals
-    uint256 public maxFlashLoanPercentage = 80; // 80% of available liquidity
+    // Fee percentage in basis points (e.g., 30 = 0.3%)
+    uint256 public flashLoanFeePercentage = 30;
 
     // Total fees collected
     uint256 public totalFeesCollected;
 
-    // AMM liquidity pool tracking
+    // Total liquidity provided
     uint256 public totalLiquidity;
 
-    // Events
-    event FlashLoanBorrowed(
-        address indexed borrower,
-        uint256 amount,
-        uint256 fee
-    );
-    event LiquidityAdded(address indexed provider, uint256 amount);
-    event LiquidityRemoved(address indexed provider, uint256 amount);
-    event FeeUpdated(uint256 oldFee, uint256 newFee);
-
-    // Mapping for liquidity providers
+    // Mapping of liquidity providers to their provided amounts
     mapping(address => uint256) public liquidityProviders;
 
-    constructor(address _owner, address _tokenAddress) Ownable(_owner) {
-        lstBtcToken = IERC20(_tokenAddress);
+    // Events
+    event FlashLoan(address indexed receiver, uint256 amount, uint256 fee);
+    event LiquidityAdded(address indexed provider, uint256 amount);
+    event LiquidityRemoved(address indexed provider, uint256 amount);
+    event FeesWithdrawn(address indexed recipient, uint256 amount);
+    event BalanceCheck(string message, uint256 balance);
+
+    constructor(address _owner, address _lstBtcToken) Ownable(_owner) {
+        lstBtcToken = IERC20(_lstBtcToken);
     }
 
     /**
-     * @dev Adds liquidity to the flash loan pool
-     * @param amount Amount of lstBTC to add as liquidity
-     */
-    function addLiquidity(uint256 amount) external nonReentrant {
-        require(amount > 0, "Amount must be greater than 0");
-
-        // Transfer lstBTC from the user to this contract
-        require(
-            lstBtcToken.transferFrom(msg.sender, address(this), amount),
-            "Transfer failed"
-        );
-
-        // Update liquidity provider's balance and total liquidity
-        liquidityProviders[msg.sender] += amount;
-        totalLiquidity += amount;
-
-        emit LiquidityAdded(msg.sender, amount);
-    }
-
-    /**
-     * @dev Removes liquidity from the flash loan pool
-     * @param amount Amount of lstBTC to remove
-     */
-    function removeLiquidity(uint256 amount) external nonReentrant {
-        require(amount > 0, "Amount must be greater than 0");
-        require(
-            liquidityProviders[msg.sender] >= amount,
-            "Insufficient liquidity"
-        );
-
-        // Ensure there's enough available liquidity (not being used in active loans)
-        require(
-            lstBtcToken.balanceOf(address(this)) >= amount,
-            "Insufficient contract balance"
-        );
-
-        // Update liquidity provider's balance and total liquidity
-        liquidityProviders[msg.sender] -= amount;
-        totalLiquidity -= amount;
-
-        // Transfer lstBTC back to the user
-        require(lstBtcToken.transfer(msg.sender, amount), "Transfer failed");
-
-        emit LiquidityRemoved(msg.sender, amount);
-    }
-
-    /**
-     * @dev Executes a flash loan
-     * @param receiver Address of the contract implementing IFlashLoanReceiver
-     * @param amount Amount of lstBTC to borrow
-     * @param params Additional parameters to pass to the receiver contract
+     * @dev Provides a flash loan to the receiver contract
+     * @param receiver The contract receiving the tokens
+     * @param amount The amount of tokens lent
+     * @param params Arbitrary data to pass to the receiver
      */
     function flashLoan(
         address receiver,
         uint256 amount,
         bytes calldata params
     ) external nonReentrant {
-        require(amount >= minFlashLoanAmount, "Amount below minimum");
-
-        uint256 availableLiquidity = lstBtcToken.balanceOf(address(this));
-        require(amount <= availableLiquidity, "Not enough liquidity");
-        require(
-            amount <= (availableLiquidity * maxFlashLoanPercentage) / 100,
-            "Amount exceeds maximum allowed percentage"
-        );
+        // Check available liquidity
+        uint256 availableLiquidity = getAvailableLiquidity();
+        require(availableLiquidity >= amount, "Insufficient liquidity");
 
         // Calculate fee
-        uint256 fee = (amount * flashLoanFeeInBps) / 10000;
+        uint256 fee = (amount * flashLoanFeePercentage) / 10000;
 
-        // Record contract balance before the loan
+        // Check balance before loan
         uint256 balanceBefore = lstBtcToken.balanceOf(address(this));
+        emit BalanceCheck("Balance before loan", balanceBefore);
 
-        // Transfer lstBTC to the receiver
-        require(
-            lstBtcToken.transfer(receiver, amount),
-            "Transfer to receiver failed"
-        );
+        // Transfer tokens to receiver
+        require(lstBtcToken.transfer(receiver, amount), "Transfer failed");
 
-        // Execute the operation
+        // Execute operation on receiver
         require(
             IFlashLoanReceiver(receiver).executeOperation(amount, fee, params),
             "Flash loan execution failed"
         );
 
-        // Ensure the loan plus fee has been repaid
+        // Check balance after execution
         uint256 balanceAfter = lstBtcToken.balanceOf(address(this));
+        emit BalanceCheck("Balance after execution", balanceAfter);
+
+        // Verify repayment - the balance should be at least the original balance
         require(
             balanceAfter >= balanceBefore + fee,
             "Flash loan not repaid correctly"
@@ -151,64 +91,96 @@ contract LstBtcFlashLoan is ReentrancyGuard, Ownable {
         // Update fees collected
         totalFeesCollected += fee;
 
-        emit FlashLoanBorrowed(msg.sender, amount, fee);
+        emit FlashLoan(receiver, amount, fee);
     }
 
     /**
-     * @dev Updates the flash loan fee
-     * @param newFeeInBps New fee in basis points
+     * @dev Add liquidity to the flash loan pool
+     * @param amount Amount of tokens to add
      */
-    function updateFlashLoanFee(uint256 newFeeInBps) external onlyOwner {
-        require(newFeeInBps <= 100, "Fee too high"); // Max 1%
+    function addLiquidity(uint256 amount) external {
+        require(amount > 0, "Amount must be greater than 0");
 
-        uint256 oldFee = flashLoanFeeInBps;
-        flashLoanFeeInBps = newFeeInBps;
+        // Transfer tokens from user to this contract
+        require(
+            lstBtcToken.transferFrom(msg.sender, address(this), amount),
+            "Transfer failed"
+        );
 
-        emit FeeUpdated(oldFee, newFeeInBps);
+        // Update liquidity provider's balance
+        liquidityProviders[msg.sender] += amount;
+
+        // Update total liquidity
+        totalLiquidity += amount;
+
+        emit LiquidityAdded(msg.sender, amount);
     }
 
     /**
-     * @dev Withdraws collected fees
+     * @dev Remove liquidity from the flash loan pool
+     * @param amount Amount of tokens to remove
+     */
+    function removeLiquidity(uint256 amount) external nonReentrant {
+        require(amount > 0, "Amount must be greater than 0");
+        require(
+            liquidityProviders[msg.sender] >= amount,
+            "Insufficient liquidity"
+        );
+
+        // Calculate available liquidity (excluding fees)
+        uint256 availableLiquidity = getAvailableLiquidity() -
+            totalFeesCollected;
+        require(
+            availableLiquidity >= amount,
+            "Insufficient available liquidity"
+        );
+
+        // Update liquidity provider's balance
+        liquidityProviders[msg.sender] -= amount;
+
+        // Update total liquidity
+        totalLiquidity -= amount;
+
+        // Transfer tokens to user
+        require(lstBtcToken.transfer(msg.sender, amount), "Transfer failed");
+
+        emit LiquidityRemoved(msg.sender, amount);
+    }
+
+    /**
+     * @dev Withdraw collected fees
      * @param recipient Address to receive the fees
      */
-    function withdrawFees(address recipient) external onlyOwner {
-        require(recipient != address(0), "Invalid recipient");
+    function withdrawFees(address recipient) external onlyOwner nonReentrant {
+        require(totalFeesCollected > 0, "No fees to withdraw");
 
         uint256 feesToWithdraw = totalFeesCollected;
         totalFeesCollected = 0;
 
         require(
             lstBtcToken.transfer(recipient, feesToWithdraw),
-            "Fee transfer failed"
+            "Transfer failed"
         );
+
+        emit FeesWithdrawn(recipient, feesToWithdraw);
     }
 
     /**
-     * @dev Updates maximum flash loan percentage
-     * @param newMaxPercentage New max percentage (1-100)
+     * @dev Set the flash loan fee percentage
+     * @param newFeePercentage New fee percentage in basis points
      */
-    function updateMaxLoanPercentage(
-        uint256 newMaxPercentage
+    function setFlashLoanFeePercentage(
+        uint256 newFeePercentage
     ) external onlyOwner {
-        require(
-            newMaxPercentage > 0 && newMaxPercentage <= 100,
-            "Invalid percentage"
-        );
-        maxFlashLoanPercentage = newMaxPercentage;
+        require(newFeePercentage <= 1000, "Fee percentage too high"); // Max 10%
+        flashLoanFeePercentage = newFeePercentage;
     }
 
     /**
-     * @dev Updates minimum flash loan amount
-     * @param newMinAmount New minimum amount
+     * @dev Get available liquidity in the flash loan pool
+     * @return Available liquidity
      */
-    function updateMinLoanAmount(uint256 newMinAmount) external onlyOwner {
-        minFlashLoanAmount = newMinAmount;
-    }
-
-    /**
-     * @dev Returns available liquidity for flash loans
-     */
-    function getAvailableLiquidity() external view returns (uint256) {
+    function getAvailableLiquidity() public view returns (uint256) {
         return lstBtcToken.balanceOf(address(this));
     }
 }
