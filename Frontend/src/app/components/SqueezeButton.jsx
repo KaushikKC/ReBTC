@@ -1,24 +1,35 @@
 import React from "react";
 import styled from "styled-components";
-import { useNavigate } from "react-router-dom";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 const SqueezeButton = ({ text, to, onClick }) => {
-  const navigate = useNavigate();
+  const router = useRouter();
 
   const handleClick = () => {
     if (onClick) {
       onClick();
     }
     if (to) {
-      navigate(to);
+      router.push(to);
     }
   };
 
+  // If there's a "to" prop, wrap the button in a Link component
+  if (to && !onClick) {
+    return (
+      <StyledWrapper>
+        <Link href={to} passHref>
+          <button>{text}</button>
+        </Link>
+      </StyledWrapper>
+    );
+  }
+
+  // Otherwise, use the button with onClick handler
   return (
     <StyledWrapper>
-      <button onClick={handleClick}>
-        {text}
-      </button>
+      <button onClick={handleClick}>{text}</button>
     </StyledWrapper>
   );
 };
