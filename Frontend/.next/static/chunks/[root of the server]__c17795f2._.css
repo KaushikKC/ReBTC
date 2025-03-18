@@ -1300,11 +1300,11 @@
   }
 
   .bg-\[\#0D1117\]\/40 {
-    background-color: oklab(17.6285% -.00282954 -.0137322 / .4);
+    background-color: oklab(17.6285% -.00282951 -.0137323 / .4);
   }
 
   .bg-\[\#0D1117\]\/50 {
-    background-color: oklab(17.6285% -.00282954 -.0137322 / .5);
+    background-color: oklab(17.6285% -.00282951 -.0137323 / .5);
   }
 
   .bg-\[\#1A1F26\] {
@@ -1538,10 +1538,13 @@
     padding-inline: calc(var(--spacing) * 16);
   }
 
+<<<<<<< HEAD
   .px-32 {
     padding-inline: calc(var(--spacing) * 32);
   }
 
+=======
+>>>>>>> origin/main
   .py-0 {
     padding-block: calc(var(--spacing) * 0);
   }
@@ -1554,10 +1557,13 @@
     padding-block: calc(var(--spacing) * 3);
   }
 
+<<<<<<< HEAD
   .py-4 {
     padding-block: calc(var(--spacing) * 4);
   }
 
+=======
+>>>>>>> origin/main
   .py-5 {
     padding-block: calc(var(--spacing) * 5);
   }
@@ -1630,10 +1636,13 @@
     text-align: center;
   }
 
+<<<<<<< HEAD
   .text-left {
     text-align: left;
   }
 
+=======
+>>>>>>> origin/main
   .font-\[\'Arial\'\] {
     font-family: Arial;
   }
@@ -1750,11 +1759,11 @@
   }
 
   .text-\[\#E5E7EB\]\/60 {
-    color: oklab(92.7582% -.000554115 -.00578702 / .6);
+    color: oklab(92.7582% -.000553876 -.00578707 / .6);
   }
 
   .text-\[\#E5E7EB\]\/80 {
-    color: oklab(92.7582% -.000554115 -.00578702 / .8);
+    color: oklab(92.7582% -.000553876 -.00578708 / .8);
   }
 
   .text-\[\#F7931A\] {
@@ -1773,10 +1782,13 @@
     color: var(--color-gray-400);
   }
 
+<<<<<<< HEAD
   .text-red-400 {
     color: var(--color-red-400);
   }
 
+=======
+>>>>>>> origin/main
   .text-transparent {
     color: #0000;
   }
