@@ -17,7 +17,7 @@ function Dashboard() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
-            className="text-[#F7931A]"
+            className=""
           >
             Align your Chakras
           </motion.p>
@@ -25,7 +25,7 @@ function Dashboard() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.2 }}
-            className="text-center text-[44px] font-bold text-white tracking-wide relative"
+            className="text-center text-[44px] font-bold text-[#2F80ED] tracking-wide relative"
           >
             Core & BTC's Yield & Liquidity Hub
           </motion.p>
@@ -40,12 +40,11 @@ function Dashboard() {
           </motion.p>
         </div>
       </div>
-      <div className="flex justify-around pb-26 px-4 ">
-        <SqueezeButton text={"Deposit"} />
-        <SqueezeButton text={"Deposit"} />
-        <SqueezeButton text={"Deposit"} />
-        <SqueezeButton text={"Deposit"} />
-        <SqueezeButton text={"Deposit"} />
+      <div className="flex justify-center pb-26 gap-8">
+        <SqueezeButton text={"Deposit & Yield Vault"} to="/deposit" />
+        <SqueezeButton text={"Borrow Against BTC"} to="" />
+        <SqueezeButton text={"Instant Liquidity "} to="" />
+        <SqueezeButton text={"BTC Insurance Pool "} to="" />
       </div>
       <div className="flex justify-around pb-26 px-4 bg-[#0D1117]/50 backdrop-blur-sm">
         <motion.div

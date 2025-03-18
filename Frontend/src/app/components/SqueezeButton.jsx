@@ -1,10 +1,22 @@
 import React from "react";
 import styled from "styled-components";
+import { useNavigate } from "react-router-dom";
 
-const SqueezeButton = ({ text }) => {
+const SqueezeButton = ({ text, to, onClick }) => {
+  const navigate = useNavigate();
+
+  const handleClick = () => {
+    if (onClick) {
+      onClick();
+    }
+    if (to) {
+      navigate(to);
+    }
+  };
+
   return (
     <StyledWrapper>
-      <button>
+      <button onClick={handleClick}>
         {text}
       </button>
     </StyledWrapper>
@@ -14,19 +26,19 @@ const SqueezeButton = ({ text }) => {
 const StyledWrapper = styled.div`
   button {
     height: 2.8em;
-    width: 9em;
+    padding: 0 1em;
     background: transparent;
     -webkit-animation: jello-horizontal 0.9s both;
     animation: jello-horizontal 0.9s both;
-    border: 2px solid #2f80ed;
+    border: 2px solid #f7931a;
     outline: none;
-    color: #2f80ed;
+    color: #f7931a;
     cursor: pointer;
     font-size: 17px;
   }
 
   button:hover {
-    background: #2f80ed;
+    background: #f7931a;
     color: #ffffff;
     animation: squeeze3124 0.9s both;
   }
