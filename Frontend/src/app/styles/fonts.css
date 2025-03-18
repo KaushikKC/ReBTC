@@ -1,0 +1,7 @@
+@font-face {
+  font-family: "Quantify";
+  src: url("../../fonts/QuantifyBold.ttf") format("truetype");
+  font-weight: bold;
+  font-style: normal;
+  font-display: swap;
+}

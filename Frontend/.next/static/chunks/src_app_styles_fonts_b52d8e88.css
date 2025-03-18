@@ -1,0 +1,10 @@
+/* [project]/src/app/styles/fonts.css [app-client] (css) */
+@font-face {
+  font-family: Quantify;
+  src: url("../media/QuantifyBold.8d8f9e69.ttf") format("truetype");
+  font-weight: bold;
+  font-style: normal;
+  font-display: swap;
+}
+
+/*# sourceMappingURL=src_app_styles_fonts_b52d8e88.css.map*/
