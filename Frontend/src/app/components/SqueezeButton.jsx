@@ -1,35 +1,37 @@
+"use client";
+
 import React from "react";
 import styled from "styled-components";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 
 const SqueezeButton = ({ text, to, onClick }) => {
-  const router = useRouter();
+  const pathname = usePathname();
+  const isActive = to ? pathname === to || pathname === `${to}/` : false;
 
   const handleClick = () => {
     if (onClick) {
       onClick();
     }
-    if (to) {
-      router.push(to);
-    }
   };
 
-  // If there's a "to" prop, wrap the button in a Link component
   if (to && !onClick) {
     return (
-      <StyledWrapper>
+      <StyledWrapper $isActive={isActive}>
         <Link href={to} passHref>
-          <button>{text}</button>
+          <button className={isActive ? "active" : ""}>
+            {text}
+          </button>
         </Link>
       </StyledWrapper>
     );
   }
 
-  // Otherwise, use the button with onClick handler
   return (
-    <StyledWrapper>
-      <button onClick={handleClick}>{text}</button>
+    <StyledWrapper $isActive={isActive}>
+      <button onClick={handleClick} className={isActive ? "active" : ""}>
+        {text}
+      </button>
     </StyledWrapper>
   );
 };
@@ -38,20 +40,42 @@ const StyledWrapper = styled.div`
   button {
     height: 2.8em;
     padding: 0 1em;
-    background: transparent;
-    -webkit-animation: jello-horizontal 0.9s both;
-    animation: jello-horizontal 0.9s both;
+    background: ${props => (props.$isActive ? "#f7931a" : "transparent")};
     border: 2px solid #f7931a;
     outline: none;
-    color: #f7931a;
+    color: ${props => (props.$isActive ? "#ffffff" : "#f7931a")};
     cursor: pointer;
     font-size: 17px;
+    position: relative;
+    transition: background-color 0.3s ease, color 0.3s ease;
+
+    &.active {
+      background: #f7931a;
+      color: #ffffff;
+    }
+
+    ${props =>
+      !props.$isActive &&
+      `
+      &:after {
+        content: '';
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        background: #f7931a;
+        top: 0;
+        left: 0;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+        z-index: -1;
+      }
+    `};
   }
 
   button:hover {
     background: #f7931a;
     color: #ffffff;
-    animation: squeeze3124 0.9s both;
+    animation: ${props => (props.$isActive ? "none" : "squeeze3124 0.9s both")};
   }
 
   @keyframes squeeze3124 {

@@ -42,9 +42,9 @@ function Dashboard() {
       </div>
       <div className="flex justify-center pb-26 gap-8">
         <SqueezeButton text={"Deposit & Yield Vault"} to="/deposit" />
-        <SqueezeButton text={"Borrow Against BTC"} to="" />
-        <SqueezeButton text={"Instant Liquidity "} to="" />
-        <SqueezeButton text={"BTC Insurance Pool "} to="" />
+        <SqueezeButton text={"Borrow Against BTC"} to="/stablecoin-loan" />
+        <SqueezeButton text={"Instant Liquidity"} to="/flash-loan" />
+        <SqueezeButton text={"BTC Insurance Pool "} to="/insurance" />
       </div>
       <div className="flex justify-around pb-26 px-4 bg-[#0D1117]/50 backdrop-blur-sm">
         <motion.div
