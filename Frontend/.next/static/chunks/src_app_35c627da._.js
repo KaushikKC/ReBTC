@@ -382,49 +382,50 @@ var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist
 var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$navigation$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/node_modules/next/navigation.js [app-client] (ecmascript)");
 ;
 var _s = __turbopack_context__.k.signature();
+"use client";
 ;
 ;
 ;
 ;
 const SqueezeButton = ({ text, to, onClick })=>{
     _s();
-    const router = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$navigation$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useRouter"])();
+    const pathname = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$navigation$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["usePathname"])();
+    const isActive = to ? pathname === to || pathname === `${to}/` : false;
     const handleClick = ()=>{
         if (onClick) {
             onClick();
         }
-        if (to) {
-            router.push(to);
-        }
     };
-    // If there's a "to" prop, wrap the button in a Link component
     if (to && !onClick) {
         return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(StyledWrapper, {
+            $isActive: isActive,
             children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$client$2f$app$2d$dir$2f$link$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
                 href: to,
                 passHref: true,
                 children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
+                    className: isActive ? "active" : "",
                     children: text
                 }, void 0, false, {
                     fileName: "[project]/src/app/components/SqueezeButton.jsx",
-                    lineNumber: 23,
+                    lineNumber: 22,
                     columnNumber: 11
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/src/app/components/SqueezeButton.jsx",
-                lineNumber: 22,
+                lineNumber: 21,
                 columnNumber: 9
             }, this)
         }, void 0, false, {
             fileName: "[project]/src/app/components/SqueezeButton.jsx",
-            lineNumber: 21,
+            lineNumber: 20,
             columnNumber: 7
         }, this);
     }
-    // Otherwise, use the button with onClick handler
     return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(StyledWrapper, {
+        $isActive: isActive,
         children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
             onClick: handleClick,
+            className: isActive ? "active" : "",
             children: text
         }, void 0, false, {
             fileName: "[project]/src/app/components/SqueezeButton.jsx",
@@ -437,9 +438,9 @@ const SqueezeButton = ({ text, to, onClick })=>{
         columnNumber: 5
     }, this);
 };
-_s(SqueezeButton, "fN7XvhJ+p5oE6+Xlo0NJmXpxjC8=", false, function() {
+_s(SqueezeButton, "xbyQPtUVMO7MNj7WjJlpdWqRcTo=", false, function() {
     return [
-        __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$navigation$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useRouter"]
+        __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$navigation$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["usePathname"]
     ];
 });
 _c = SqueezeButton;
@@ -447,20 +448,40 @@ const StyledWrapper = __TURBOPACK__imported__module__$5b$project$5d2f$node_modul
   button {
     height: 2.8em;
     padding: 0 1em;
-    background: transparent;
-    -webkit-animation: jello-horizontal 0.9s both;
-    animation: jello-horizontal 0.9s both;
+    background: ${(props)=>props.$isActive ? "#f7931a" : "transparent"};
     border: 2px solid #f7931a;
     outline: none;
-    color: #f7931a;
+    color: ${(props)=>props.$isActive ? "#ffffff" : "#f7931a"};
     cursor: pointer;
     font-size: 17px;
+    position: relative;
+    transition: background-color 0.3s ease, color 0.3s ease;
+
+    &.active {
+      background: #f7931a;
+      color: #ffffff;
+    }
+
+    ${(props)=>!props.$isActive && `
+      &:after {
+        content: '';
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        background: #f7931a;
+        top: 0;
+        left: 0;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+        z-index: -1;
+      }
+    `};
   }
 
   button:hover {
     background: #f7931a;
     color: #ffffff;
-    animation: squeeze3124 0.9s both;
+    animation: ${(props)=>props.$isActive ? "none" : "squeeze3124 0.9s both"};
   }
 
   @keyframes squeeze3124 {
@@ -625,15 +646,15 @@ function Dashboard() {
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$app$2f$components$2f$SqueezeButton$2e$jsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
                         text: "Borrow Against BTC",
-                        to: ""
+                        to: "/stablecoin-loan"
                     }, void 0, false, {
                         fileName: "[project]/src/app/dashboard/page.jsx",
                         lineNumber: 45,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$app$2f$components$2f$SqueezeButton$2e$jsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
-                        text: "Instant Liquidity ",
-                        to: ""
+                        text: "Instant Liquidity",
+                        to: "/flash-loan"
                     }, void 0, false, {
                         fileName: "[project]/src/app/dashboard/page.jsx",
                         lineNumber: 46,
@@ -641,7 +662,7 @@ function Dashboard() {
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$app$2f$components$2f$SqueezeButton$2e$jsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
                         text: "BTC Insurance Pool ",
-                        to: ""
+                        to: "/insurance"
                     }, void 0, false, {
                         fileName: "[project]/src/app/dashboard/page.jsx",
                         lineNumber: 47,

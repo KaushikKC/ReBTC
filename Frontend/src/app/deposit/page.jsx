@@ -6,6 +6,7 @@ import Navbar from "../components/Navbar";
 import yieldbox from "../assets/yieldbox.svg";
 import SqueezeButton from "../components/SqueezeButton";
 import Image from "next/image";
+import UserDepositsOverview from "../components/UserDepositsOverview";
 const cryptoOptions = [
   { id: "btc", name: "BTC", balance: "0.5" },
   { id: "wbtc", name: "wBTC", balance: "0.3" },
@@ -32,10 +33,14 @@ function Deposit() {
       <div className="flex-grow flex justify-center px-4 pt-32">
         <div className="flex justify-center pb-10 gap-8">
           <SqueezeButton text={"Deposit & Yield Vault"} to="/deposit" />
-          <SqueezeButton text={"Borrow Against BTC"} to="" />
-          <SqueezeButton text={"Instant Liquidity "} to="" />
-          <SqueezeButton text={"BTC Insurance Pool "} to="" />
+          <SqueezeButton text={"Borrow Against BTC"} to="/stablecoin-loan" />
+          <SqueezeButton text={"Instant Liquidity "} to="/flash-loan" />
+          <SqueezeButton text={"BTC Insurance Pool "} to="/insurance" />
         </div>
+      </div>
+      <div className=" px-4 md:px-8 space-y-8 pb-5">
+        {/* User Deposits Overview */}
+        <UserDepositsOverview />
       </div>
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -152,6 +157,7 @@ function Deposit() {
           Deposit {selectedCrypto.name}
         </motion.button>
       </motion.div>
+
       <motion.h2
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
