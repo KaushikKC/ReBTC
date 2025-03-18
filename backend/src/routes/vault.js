@@ -6,7 +6,7 @@ const {
   getProvider,
   getVaultContract,
   getBTCContract,
-} = require("../services/blockchain");
+} = require("../services/services");
 
 /**
  * @route POST /api/v1/vault/deposit

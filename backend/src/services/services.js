@@ -1,12 +1,20 @@
 const ethers = require("ethers");
 const BTCYieldVaultABI = require("../abis/BTCYieldVault.json");
 const MockBTCABI = require("../abis/MockBTC.json");
-const config = require("../config");
+const config = require("../config/config");
 
 /**
  * Get Ethereum provider based on configuration
  */
 function getProvider() {
+  // Check if custom RPC URL is provided
+  const rpcUrl = process.env.RPC_URL;
+
+  if (rpcUrl) {
+    // Use custom RPC URL if provided
+    return new ethers.providers.JsonRpcProvider(rpcUrl);
+  }
+
   // Use environment variable to determine which network to connect to
   const network = process.env.ETHEREUM_NETWORK || "localhost";
 
@@ -16,7 +24,13 @@ function getProvider() {
   } else {
     // Connect to Infura or other provider for testnet/mainnet
     const infuraKey = process.env.INFURA_API_KEY;
-    return new ethers.providers.InfuraProvider(network, infuraKey);
+    if (infuraKey) {
+      return new ethers.providers.InfuraProvider(network, infuraKey);
+    } else {
+      throw new Error(
+        "Either RPC_URL or INFURA_API_KEY must be provided for non-localhost networks"
+      );
+    }
   }
 }
 

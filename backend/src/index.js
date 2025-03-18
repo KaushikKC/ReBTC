@@ -5,7 +5,7 @@ const morgan = require("morgan");
 const config = require("../src/config/config");
 
 // Import routes
-// const vaultRoutes = require("./routes/vault");
+const vaultRoutes = require("./routes/vault");
 // We'll add more routes later
 
 // Initialize express app
@@ -18,7 +18,7 @@ app.use(morgan("dev")); // Logging
 app.use(express.json()); // Parse JSON bodies
 
 // API routes
-// app.use(`${config.api.prefix}/vault`, vaultRoutes);
+app.use(`${config.api.prefix}/vault`, vaultRoutes);
 // We'll add more routes here
 
 // Health check endpoint
