@@ -46,6 +46,10 @@ contract BTCYieldVault is Ownable, ReentrancyGuard {
     uint256 public constant YEAR_IN_SECONDS = 365 days;
     uint256 public lockPeriod = YEAR_IN_SECONDS; // 1 year lock period
 
+    // Decimal adjustment factors
+    uint8 public btcDecimals; // Will be set in constructor
+    uint8 public constant LST_BTC_DECIMALS = 18; // ERC20 default
+
     // User deposit info
     struct UserDeposit {
         uint256 amount; // Amount of BTC deposited
@@ -68,6 +72,16 @@ contract BTCYieldVault is Ownable, ReentrancyGuard {
         btcToken = IERC20(_btcToken);
         lstBTCToken = new LstBTC();
         lendingProtocol = ILendingProtocol(_lendingProtocol);
+
+        // Get BTC token decimals
+        // Note: This assumes the token implements the ERC20 decimals() function
+        // If using in Remix with a mock token, ensure it has this function
+        try ERC20(_btcToken).decimals() returns (uint8 _decimals) {
+            btcDecimals = _decimals;
+        } catch {
+            // Default to 8 decimals for BTC if the call fails
+            btcDecimals = 8;
+        }
     }
 
     /**
@@ -89,8 +103,19 @@ contract BTCYieldVault is Ownable, ReentrancyGuard {
         // Deposit into lending protocol
         lendingProtocol.deposit(address(btcToken), amount);
 
-        // Calculate lstBTC amount to mint (1:1 initially)
-        uint256 lstBTCToMint = amount;
+        // Calculate lstBTC amount to mint with decimal adjustment
+        // Convert from BTC decimals to lstBTC decimals (18)
+        uint256 lstBTCToMint;
+        if (LST_BTC_DECIMALS > btcDecimals) {
+            // If lstBTC has more decimals than BTC, multiply
+            lstBTCToMint = amount.mul(10 ** (LST_BTC_DECIMALS - btcDecimals));
+        } else if (LST_BTC_DECIMALS < btcDecimals) {
+            // If lstBTC has fewer decimals than BTC, divide
+            lstBTCToMint = amount.div(10 ** (btcDecimals - LST_BTC_DECIMALS));
+        } else {
+            // If same number of decimals, 1:1 ratio
+            lstBTCToMint = amount;
+        }
 
         // Mint lstBTC to user
         lstBTCToken.mint(msg.sender, lstBTCToMint);
@@ -167,8 +192,22 @@ contract BTCYieldVault is Ownable, ReentrancyGuard {
         uint256 lstBTCTotalSupply = lstBTCToken.totalSupply();
         if (lstBTCTotalSupply == 0) return 0;
 
-        // Exchange rate increases as totalValueLocked increases from yield
-        return lstBTCAmount.mul(totalValueLocked).div(lstBTCTotalSupply);
+        // Calculate BTC amount based on the proportion of lstBTC being withdrawn
+        uint256 btcAmount = lstBTCAmount.mul(totalValueLocked).div(
+            lstBTCTotalSupply
+        );
+
+        // Convert from lstBTC decimals to BTC decimals
+        if (LST_BTC_DECIMALS > btcDecimals) {
+            // If lstBTC has more decimals than BTC, divide
+            return btcAmount.div(10 ** (LST_BTC_DECIMALS - btcDecimals));
+        } else if (LST_BTC_DECIMALS < btcDecimals) {
+            // If lstBTC has fewer decimals than BTC, multiply
+            return btcAmount.mul(10 ** (btcDecimals - LST_BTC_DECIMALS));
+        } else {
+            // If same number of decimals, no adjustment needed
+            return btcAmount;
+        }
     }
 
     /**
