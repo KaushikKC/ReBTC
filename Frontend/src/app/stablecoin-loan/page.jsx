@@ -4,11 +4,11 @@ import React, { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Navbar from "../components/Navbar";
 import SqueezeButton from "../components/SqueezeButton";
-import { FaBitcoin, FaChevronDown, FaExchangeAlt } from "react-icons/fa";
 import RepaymentModal from "../components/RepaymentModal";
 import Slider from "rc-slider";
 import "rc-slider/assets/index.css";
 import Chart from "../components/Chart";
+import TimeLoader from "../components/TimeLoader";
 import { useAccount, useBalance } from "wagmi";
 import { usePrivy } from "@privy-io/react-auth";
 import { ethers } from "ethers";
@@ -32,6 +32,11 @@ const StablecoinLoan = () => {
   const [showRepayModal, setShowRepayModal] = useState(false);
   const [selectedLoan, setSelectedLoan] = useState(null);
   const [dueDate, setDueDate] = useState("");
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
+  const [processingStep, setProcessingStep] = useState("");
+
   const [btcPrice, setBtcPrice] = useState(65000); // Default price, will be fetched from contract
   const [isLoading, setIsLoading] = useState(false);
   const [loanPositions, setLoanPositions] = useState([]);
@@ -54,11 +59,18 @@ const StablecoinLoan = () => {
     ? parseFloat(ethers.utils.formatUnits(btcBalanceData.value, 8))
     : 0;
 
-  // Calculate loan amount based on collateral and LTV
   const calculateLoanAmount = () => {
     if (!collateralAmount) return 0;
     return (collateralAmount * btcPrice * ltvPercentage) / 100;
   };
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsInitialLoading(false);
+    }, 2000);
+
+    return () => clearTimeout(timer);
+  }, []);
 
   // Calculate interest rate based on LTV
   const calculateInterestRate = () => {
@@ -417,6 +429,40 @@ const StablecoinLoan = () => {
               >
                 {isLoading ? "Processing..." : `Borrow ${selectedStablecoin}`}
               </motion.button>
+              <AnimatePresence>
+                {isProcessing && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="absolute inset-0 bg-[#1C2128]/90 backdrop-blur-sm rounded-xl flex flex-col items-center justify-center gap-4"
+                  >
+                    {!isSuccess ? (
+                      <>
+                        <TimeLoader />
+                        <motion.p
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="text-white font-medium"
+                        >
+                          {processingStep}
+                        </motion.p>
+                      </>
+                    ) : (
+                      <motion.div
+                        initial={{ scale: 0.5, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        className="flex flex-col items-center gap-4"
+                      >
+                        <div className="text-[#4CAF50] text-5xl">✓</div>
+                        <p className="text-white font-medium">
+                          {processingStep}
+                        </p>
+                      </motion.div>
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </motion.div>
 
             {/* Chart Section */}

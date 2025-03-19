@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { FaChevronDown } from "react-icons/fa";
 import Navbar from "../components/Navbar";
 import yieldbox from "../assets/yieldbox.svg";
@@ -12,6 +12,7 @@ import { useAccount, useBalance } from "wagmi";
 import { ethers } from "ethers";
 import { useDataContext } from "../../context/DataContext";
 import { toast } from "react-hot-toast";
+import TimeLoader from "../components/TimeLoader";
 
 // ABI for the deposit contract
 const DEPOSIT_CONTRACT_ABI = [
@@ -47,6 +48,10 @@ function Deposit() {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [amount, setAmount] = useState("");
   const [apy, setApy] = useState(12.5); // Example APY
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
+  const [processingStep, setProcessingStep] = useState("");
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [userBalances, setUserBalances] = useState({});
   const [tvl, setTvl] = useState({ btc: "0", wbtc: "0", weth: "0" });
@@ -225,7 +230,7 @@ function Deposit() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className="w-full max-w-2xl mx-auto bg-[#1C2128] rounded-xl p-6 shadow-lg"
+        className="w-full max-w-2xl mx-auto bg-[#1C2128] rounded-xl p-6 shadow-lg relative"
       >
         {/* Asset Selection Section */}
         <div className="mb-6">
@@ -365,14 +370,46 @@ function Deposit() {
         >
           {isLoading ? "Processing..." : `Deposit ${selectedCrypto.name}`}
         </motion.button>
+        <AnimatePresence>
+          {isProcessing && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-[#1C2128]/90 backdrop-blur-sm rounded-xl flex flex-col items-center justify-center gap-4"
+            >
+              {!isSuccess ? (
+                <>
+                  <TimeLoader />
+                  <motion.p
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="text-white font-medium"
+                  >
+                    {processingStep}
+                  </motion.p>
+                </>
+              ) : (
+                <motion.div
+                  initial={{ scale: 0.5, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  className="flex flex-col items-center gap-4"
+                >
+                  <div className="text-[#4CAF50] text-5xl">✓</div>
+                  <p className="text-white font-medium">{processingStep}</p>
+                </motion.div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </motion.div>
 
       <motion.h2
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        whileHover={{ scale: 1.05 }}
+        whileHover={{ scale: 1.0 }}
         transition={{ duration: 0.6 }}
-        className="text-center text-[44px] font-bold text-white tracking-wide relative pt-16"
+        className="text-center text-[35px] font-bold text-white tracking-wide relative pt-16"
       >
         <span className="relative inline-block">
           Live Yield Simulation Box
@@ -393,8 +430,8 @@ function Deposit() {
       <div className="flex justify-center">
         <Image
           src={yieldbox}
-          alt="yield"
-          className="w-full max-w-[1200px] px-6"
+          alt="yeild"
+          className="w-full max-w-[1200px] px-6 "
           priority
         />
       </div>

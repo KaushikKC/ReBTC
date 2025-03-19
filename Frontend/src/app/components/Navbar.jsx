@@ -72,9 +72,10 @@ function Navbar() {
 
   const renderMenuItem = (item) => {
     if (item === "CONNECT WALLET") {
-      return <Button key={item} text={item} onClick={handleWalletConnect} />;
+      return <Button key={item} text={item} onClick={handleWalletConnect} className="bg-[#F7931A] hover:bg-[#F7931A]/80 text-white px-4 py-2 rounded-md text-sm transition-colors duration-300"
+/>;
     }
-    return <Button key={item} text={item} />;
+    return <Button key={item} text={item} className="font-['Quantify']"/>;
   };
 
   // Get wallet display text
@@ -104,16 +105,13 @@ function Navbar() {
       <div className="hidden lg:flex gap-8 items-center">
         {menuItems.map((item) => renderMenuItem(item))}
 
-        {/* Rainbow Kit Connect Button */}
-        <div className="ml-2">
-          <ConnectButton />
-        </div>
+  
 
         {/* Privy Login Button */}
         <button
           disabled={disableLogin}
           onClick={login}
-          className="bg-[#F7931A] hover:bg-[#F7931A]/80 text-white px-4 py-2 rounded-md text-sm transition-colors duration-300"
+          className="bg-[#F7931A] hover:bg-[#F7931A]/80 text-white px-4 py-2 rounded-md text-sm transition-colors duration-300 font-['Quantify']"
         >
           {getWalletDisplayText()}
         </button>

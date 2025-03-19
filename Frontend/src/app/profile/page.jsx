@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   FaCopy,
@@ -11,11 +11,24 @@ import {
 } from "react-icons/fa";
 import Navbar from "../components/Navbar";
 import RepaymentModal from "../components/RepaymentModal";
+import TimeLoader from "../components/TimeLoader";
 
 const Profile = () => {
   const [copySuccess, setCopySuccess] = useState(false);
   const [showRepayModal, setShowRepayModal] = useState(false);
   const [selectedLoan, setSelectedLoan] = useState(null);
+  const [isProcessing, setIsProcessing] = useState(true); // Start with true to show loading
+  const [showContent, setShowContent] = useState(false);
+
+  // Effect to handle initial loading
+  useEffect(() => {
+    const loadingTimer = setTimeout(() => {
+      setIsProcessing(false);
+      setShowContent(true);
+    }, 2000); 
+
+    return () => clearTimeout(loadingTimer);
+  }, []);
 
   const walletAddress = "0xA12...B34";
 
@@ -32,7 +45,6 @@ const Profile = () => {
       ...loan,
       borrowed: loan.amount,
       interest: loan.rate
-      // Add any other required properties
     };
 
     setSelectedLoan(preparedLoan);
@@ -106,7 +118,29 @@ const Profile = () => {
       <Navbar />
 
       <div className="container mx-auto px-4 pt-32 pb-16">
-        {/* User Information Section */}
+        <AnimatePresence>
+          {isProcessing &&
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-[#1C2128]/90 backdrop-blur-sm flex flex-col items-center justify-center gap-4 z-50"
+            >
+              <TimeLoader />
+              <motion.p
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="text-white font-medium"
+              >
+                Fetching profile
+              </motion.p>
+            </motion.div>}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {showContent && (
+            <>
+                {/* User Information Section */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -132,6 +166,24 @@ const Profile = () => {
               </div>
             </div>
           </div>
+          <AnimatePresence>
+            {isProcessing &&
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="absolute inset-0 bg-[#1C2128]/90 backdrop-blur-sm rounded-xl flex flex-col items-center justify-center gap-4"
+              >
+                <TimeLoader />
+                <motion.p
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="text-white font-medium"
+                >
+                  Fetching profile
+                </motion.p>
+              </motion.div>}
+          </AnimatePresence>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <StatsCard
@@ -285,7 +337,7 @@ const Profile = () => {
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
                         onClick={() => handleRepayClick(loan)}
-                        className="bg-[#F7931A] text-white px-4 py-2 rounded-lg text-sm hover:bg-[#F7931A]/90"
+                        className="bg-[#2F80ED] text-white px-4 py-2 rounded-lg text-sm hover:bg-[#2F80ED]/90"
                       >
                         Repay
                       </motion.button>
@@ -343,23 +395,27 @@ const Profile = () => {
             </table>
           </div>
         </motion.div>
+            </>
+          )}
+        </AnimatePresence>
+   
       </div>
 
       <AnimatePresence>
-        {showRepayModal &&
-          selectedLoan &&
-          <RepaymentModal
-            loan={{
-              ...selectedLoan,
-              borrowed: selectedLoan.amount,
-              interest: selectedLoan.rate
-            }}
-            onClose={() => {
-              setShowRepayModal(false);
-              setSelectedLoan(null);
-            }}
-          />}
-      </AnimatePresence>
+          {showRepayModal && selectedLoan && (
+            <RepaymentModal
+              loan={{
+                ...selectedLoan,
+                borrowed: selectedLoan.amount,
+                interest: selectedLoan.rate
+              }}
+              onClose={() => {
+                setShowRepayModal(false);
+                setSelectedLoan(null);
+              }}
+            />
+          )}
+        </AnimatePresence>
     </div>
   );
 };
