@@ -17,7 +17,7 @@ const config = {
     prefix: "/api/v1",
   },
 
-  // Gas settings
+  // Gas setting
   gas: {
     defaultGasLimit: 2000000,
     defaultGasPrice: 20, // in gwei

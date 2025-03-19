@@ -3,7 +3,7 @@ import Link from "next/link";
 
 const Button = ({ text, href }) => {
   const getHref = () => {
-    if (text === "HOME") return "/";
+    // if (text === "HOME") return "/";
     if (text === "CONNECT WALLET") return "#"; // Handle wallet connection separately
     return `/${text.toLowerCase()}`;
   };
