@@ -20,4 +20,4 @@
 
 0x4cb61fa894795B6252242A0186bb13a2A5F42142 -> LoanReciever.sol txHash -> https://scan.test2.btcs.network/tx/0x56925712456eaac5a150f803b49916c089a20683654f3aa592dc880671eb07c0 (LsBTC token passed as the constructor)
 
-0xAD756E0eFb90Bed021B0D29c098c18CBE48a2980 -> InsurancePool.sol txHash -> https://scan.test2.btcs.network/tx/0x69987ac85e28e475484f2a3fc9512c40763fa521adc59f1fa5cc28a471ce740a (lstBtC token passed as constructor)
+0xBc8ad752fBC6f2C5265E5f9172C8e2519530a54C -> InsurancePool.sol(auto-approval) (lstBtC token passed as constructor)
