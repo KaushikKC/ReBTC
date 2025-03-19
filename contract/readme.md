@@ -20,4 +20,6 @@
 
 0x4cb61fa894795B6252242A0186bb13a2A5F42142 -> LoanReciever.sol txHash -> https://scan.test2.btcs.network/tx/0x56925712456eaac5a150f803b49916c089a20683654f3aa592dc880671eb07c0 (LsBTC token passed as the constructor)
 
-0xBc8ad752fBC6f2C5265E5f9172C8e2519530a54C -> InsurancePool.sol(auto-approval) (lstBtC token passed as constructor)
+0xC94f840066C6fa664CA96Dc8c8f499B77b7E57ad -> InsurancePool.sol(auto-approval) (lstBtC(below) token passed as constructor)
+
+0x9F384C8dA02CBFA67CE9b3BDddED49c7bB327dc9 -> LstBTC (Owner being our address ; above contract is vaultAddress being owner)
