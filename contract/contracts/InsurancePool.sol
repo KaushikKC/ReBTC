@@ -8,7 +8,7 @@ import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 
 /**
  * @title BTCInsurancePool
- * @dev Contract for providing insurance protection for lstBTC holders
+ * @dev Contract for providing general insurance protection for lstBTC holders
  */
 contract BTCInsurancePool is Ownable, ReentrancyGuard {
     using SafeMath for uint256;
@@ -23,13 +23,6 @@ contract BTCInsurancePool is Ownable, ReentrancyGuard {
         Active,
         Expired,
         Claimed
-    }
-
-    // Insurance types
-    enum InsuranceType {
-        General,
-        LiquidationProtection,
-        SlashingProtection
     }
 
     // Premium rate tiers (annual percentage rate * 100 for precision)
@@ -47,7 +40,6 @@ contract BTCInsurancePool is Ownable, ReentrancyGuard {
         string coverageDetails;
         uint256 timestamp;
         ApplicationStatus status;
-        InsuranceType insuranceType;
         uint256 duration; // in days
         uint256 premium; // Premium amount in lstBTC
         uint256 premiumRate; // Premium rate * 100
@@ -80,8 +72,7 @@ contract BTCInsurancePool is Ownable, ReentrancyGuard {
     event PolicyApplicationSubmitted(
         uint256 indexed policyId,
         address indexed applicant,
-        uint256 coverageAmount,
-        InsuranceType insuranceType
+        uint256 coverageAmount
     );
     event PolicyStatusChanged(
         uint256 indexed policyId,
@@ -103,16 +94,6 @@ contract BTCInsurancePool is Ownable, ReentrancyGuard {
     );
     event FundsDeposited(address indexed from, uint256 amount);
     event FundsWithdrawn(address indexed to, uint256 amount);
-    event LiquidationProtectionTriggered(
-        uint256 indexed policyId,
-        address indexed user,
-        uint256 amount
-    );
-    event SlashingProtectionTriggered(
-        uint256 indexed policyId,
-        address indexed user,
-        uint256 amount
-    );
 
     /**
      * @dev Constructor sets the contract owner, token address, and default premium tiers
@@ -175,7 +156,6 @@ contract BTCInsurancePool is Ownable, ReentrancyGuard {
             coverageDetails: _coverageDetails,
             timestamp: block.timestamp,
             status: ApplicationStatus.Pending,
-            insuranceType: InsuranceType.General,
             duration: _duration,
             premium: premium,
             premiumRate: premiumRate,
@@ -186,120 +166,7 @@ contract BTCInsurancePool is Ownable, ReentrancyGuard {
         userPolicies[msg.sender].push(policyId);
         policyCount++;
 
-        emit PolicyApplicationSubmitted(
-            policyId,
-            msg.sender,
-            _coverageAmount,
-            InsuranceType.General
-        );
-    }
-
-    /**
-     * @dev Allows users to apply for liquidation protection insurance
-     * @param _coverageAmount The amount of coverage requested
-     * @param _coverageDetails Details about the position being protected
-     * @param _duration Duration of insurance in days
-     */
-    function applyForLiquidationProtection(
-        uint256 _coverageAmount,
-        string memory _coverageDetails,
-        uint256 _duration
-    ) external nonReentrant {
-        require(_coverageAmount > 0, "Coverage amount must be greater than 0");
-        require(
-            _coverageAmount <= maxCoveragePerPolicy,
-            "Coverage exceeds maximum allowed"
-        );
-        require(_duration > 0, "Duration must be greater than 0");
-
-        uint256 premiumRate = getPremiumRate(_duration);
-        // Liquidation protection has a premium of 2% on top of the base rate
-        premiumRate = premiumRate.add(200);
-        uint256 premium = calculatePremium(
-            _coverageAmount,
-            premiumRate,
-            _duration
-        );
-
-        uint256 policyId = policyCount;
-
-        policies[policyId] = InsurancePolicy({
-            policyholder: msg.sender,
-            coverageAmount: _coverageAmount,
-            coverageDetails: _coverageDetails,
-            timestamp: block.timestamp,
-            status: ApplicationStatus.Pending,
-            insuranceType: InsuranceType.LiquidationProtection,
-            duration: _duration,
-            premium: premium,
-            premiumRate: premiumRate,
-            expirationTimestamp: 0, // Will be set when activated
-            claimed: false
-        });
-
-        userPolicies[msg.sender].push(policyId);
-        policyCount++;
-
-        emit PolicyApplicationSubmitted(
-            policyId,
-            msg.sender,
-            _coverageAmount,
-            InsuranceType.LiquidationProtection
-        );
-    }
-
-    /**
-     * @dev Allows users to apply for slashing protection insurance
-     * @param _coverageAmount The amount of coverage requested
-     * @param _coverageDetails Details about the staking position being protected
-     * @param _duration Duration of insurance in days
-     */
-    function applyForSlashingProtection(
-        uint256 _coverageAmount,
-        string memory _coverageDetails,
-        uint256 _duration
-    ) external nonReentrant {
-        require(_coverageAmount > 0, "Coverage amount must be greater than 0");
-        require(
-            _coverageAmount <= maxCoveragePerPolicy,
-            "Coverage exceeds maximum allowed"
-        );
-        require(_duration > 0, "Duration must be greater than 0");
-
-        uint256 premiumRate = getPremiumRate(_duration);
-        // Slashing protection has a premium of 3% on top of the base rate
-        premiumRate = premiumRate.add(300);
-        uint256 premium = calculatePremium(
-            _coverageAmount,
-            premiumRate,
-            _duration
-        );
-
-        uint256 policyId = policyCount;
-
-        policies[policyId] = InsurancePolicy({
-            policyholder: msg.sender,
-            coverageAmount: _coverageAmount,
-            coverageDetails: _coverageDetails,
-            timestamp: block.timestamp,
-            status: ApplicationStatus.Pending,
-            insuranceType: InsuranceType.SlashingProtection,
-            duration: _duration,
-            premium: premium,
-            premiumRate: premiumRate,
-            expirationTimestamp: 0, // Will be set when activated
-            claimed: false
-        });
-
-        userPolicies[msg.sender].push(policyId);
-        policyCount++;
-
-        emit PolicyApplicationSubmitted(
-            policyId,
-            msg.sender,
-            _coverageAmount,
-            InsuranceType.SlashingProtection
-        );
+        emit PolicyApplicationSubmitted(policyId, msg.sender, _coverageAmount);
     }
 
     /**
@@ -385,124 +252,7 @@ contract BTCInsurancePool is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @dev Triggers liquidation protection for a user
-     * @param _policyId The ID of the active policy
-     * @param _liquidationAmount The amount needed to prevent liquidation
-     */
-    function triggerLiquidationProtection(
-        uint256 _policyId,
-        uint256 _liquidationAmount
-    ) external nonReentrant {
-        require(_policyId < policyCount, "Invalid policy ID");
-
-        InsurancePolicy storage policy = policies[_policyId];
-
-        require(
-            policy.status == ApplicationStatus.Active,
-            "Policy is not active"
-        );
-        require(
-            policy.insuranceType == InsuranceType.LiquidationProtection,
-            "Not a liquidation protection policy"
-        );
-        require(
-            msg.sender == policy.policyholder,
-            "Only the policyholder can trigger protection"
-        );
-        require(
-            block.timestamp < policy.expirationTimestamp,
-            "Policy has expired"
-        );
-        require(!policy.claimed, "Policy has already been claimed");
-        require(
-            _liquidationAmount <= policy.coverageAmount,
-            "Amount exceeds coverage"
-        );
-
-        // Transfer the liquidation amount to the policyholder
-        require(
-            poolBalance >= _liquidationAmount,
-            "Insufficient funds in the pool"
-        );
-        poolBalance = poolBalance.sub(_liquidationAmount);
-
-        require(
-            lstBTCToken.transfer(policy.policyholder, _liquidationAmount),
-            "Token transfer failed"
-        );
-
-        // Mark policy as claimed
-        policy.claimed = true;
-        policy.status = ApplicationStatus.Claimed;
-
-        emit LiquidationProtectionTriggered(
-            _policyId,
-            policy.policyholder,
-            _liquidationAmount
-        );
-
-        emit PolicyStatusChanged(_policyId, ApplicationStatus.Claimed);
-    }
-
-    /**
-     * @dev Triggers slashing protection for a user
-     * @param _policyId The ID of the active policy
-     * @param _slashAmount The amount that was slashed
-     */
-    function triggerSlashingProtection(
-        uint256 _policyId,
-        uint256 _slashAmount
-    ) external nonReentrant {
-        require(_policyId < policyCount, "Invalid policy ID");
-
-        InsurancePolicy storage policy = policies[_policyId];
-
-        require(
-            policy.status == ApplicationStatus.Active,
-            "Policy is not active"
-        );
-        require(
-            policy.insuranceType == InsuranceType.SlashingProtection,
-            "Not a slashing protection policy"
-        );
-        require(
-            msg.sender == policy.policyholder,
-            "Only the policyholder can trigger protection"
-        );
-        require(
-            block.timestamp < policy.expirationTimestamp,
-            "Policy has expired"
-        );
-        require(!policy.claimed, "Policy has already been claimed");
-        require(
-            _slashAmount <= policy.coverageAmount,
-            "Amount exceeds coverage"
-        );
-
-        // Transfer the slashed amount to the policyholder
-        require(poolBalance >= _slashAmount, "Insufficient funds in the pool");
-        poolBalance = poolBalance.sub(_slashAmount);
-
-        require(
-            lstBTCToken.transfer(policy.policyholder, _slashAmount),
-            "Token transfer failed"
-        );
-
-        // Mark policy as claimed
-        policy.claimed = true;
-        policy.status = ApplicationStatus.Claimed;
-
-        emit SlashingProtectionTriggered(
-            _policyId,
-            policy.policyholder,
-            _slashAmount
-        );
-
-        emit PolicyStatusChanged(_policyId, ApplicationStatus.Claimed);
-    }
-
-    /**
-     * @dev Allows policyholder to claim on a general insurance policy
+     * @dev Allows policyholder to claim on an insurance policy
      * @param _policyId The ID of the active policy
      * @param _claimAmount The amount to claim
      */
@@ -517,10 +267,6 @@ contract BTCInsurancePool is Ownable, ReentrancyGuard {
         require(
             policy.status == ApplicationStatus.Active,
             "Policy is not active"
-        );
-        require(
-            policy.insuranceType == InsuranceType.General,
-            "Not a general insurance policy"
         );
         require(
             msg.sender == policy.policyholder,
