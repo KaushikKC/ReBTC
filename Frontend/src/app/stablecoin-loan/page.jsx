@@ -4,11 +4,11 @@ import React, { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Navbar from "../components/Navbar";
 import SqueezeButton from "../components/SqueezeButton";
-import { FaBitcoin, FaChevronDown, FaExchangeAlt } from "react-icons/fa";
 import RepaymentModal from "../components/RepaymentModal";
 import Slider from "rc-slider";
 import "rc-slider/assets/index.css";
 import Chart from "../components/Chart";
+import TimeLoader from "../components/TimeLoader";
 
 const StablecoinLoan = () => {
   const [collateralAmount, setCollateralAmount] = useState("");
@@ -17,15 +17,27 @@ const StablecoinLoan = () => {
   const [showRepayModal, setShowRepayModal] = useState(false);
   const [selectedLoan, setSelectedLoan] = useState(null);
   const [dueDate, setDueDate] = useState("");
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
+  const [processingStep, setProcessingStep] = useState("");
 
   const MAX_LTV = 75;
-  const btcPrice = 65000; // Example price, should be fetched from API
+  const btcPrice = 65000;
   const availableBtcBalance = 2.5;
 
   const calculateLoanAmount = () => {
     if (!collateralAmount) return 0;
     return collateralAmount * btcPrice * ltvPercentage / 100;
   };
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsInitialLoading(false);
+    }, 2000);
+
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     const calculatedDueDate = new Date(
@@ -39,6 +51,32 @@ const StablecoinLoan = () => {
     if (ltv <= 50) return 2;
     if (ltv <= 65) return 2.5;
     return 3;
+  };
+  const handleBorrow = async () => {
+    try {
+      setIsProcessing(true);
+      setProcessingStep("Processing Loan Request");
+
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      setProcessingStep("Confirming Transaction");
+
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      setProcessingStep("Loan Successful!");
+      setIsSuccess(true);
+
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      console.log("Loan successful");
+    } catch (error) {
+      console.error("Loan failed:", error);
+      setProcessingStep("Loan Failed");
+    } finally {
+      setIsProcessing(false);
+      setIsSuccess(false);
+      setProcessingStep("");
+    }
   };
 
   // Example loan positions data
@@ -62,6 +100,20 @@ const StablecoinLoan = () => {
       status: "overdue"
     }
   ];
+
+  if (isInitialLoading) {
+    return (
+      <div className="relative z-10 font-['Quantify'] tracking-[1px] bg-[#0D1117] min-h-screen flex flex-col">
+        <Navbar />
+        <div className="flex-grow flex flex-col items-center justify-center">
+          <TimeLoader />
+          <p className="text-white mt-4 font-['Quantify']">
+            Loading Loan Data
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative z-10 font-['Quantify'] tracking-[1px] bg-[#0D1117] min-h-screen flex flex-col">
@@ -188,14 +240,51 @@ const StablecoinLoan = () => {
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
-                disabled={!collateralAmount || collateralAmount <= 0}
+                onClick={handleBorrow}
+                disabled={
+                  isProcessing || !collateralAmount || collateralAmount <= 0
+                }
                 className={`w-full bg-[#F7931A] text-white py-4 rounded-lg font-medium transition-colors
-                ${!collateralAmount || collateralAmount <= 0
-                  ? "opacity-50 cursor-not-allowed"
-                  : "hover:bg-[#F7931A]/90"}`}
+          ${!collateralAmount || collateralAmount <= 0 || isProcessing
+            ? "opacity-50 cursor-not-allowed"
+            : "hover:bg-[#F7931A]/90"}`}
               >
-                Borrow {selectedStablecoin}
+                {isProcessing
+                  ? "Processing..."
+                  : `Borrow ${selectedStablecoin}`}
               </motion.button>
+              <AnimatePresence>
+        {isProcessing && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 bg-[#1C2128]/90 backdrop-blur-sm rounded-xl flex flex-col items-center justify-center gap-4"
+          >
+            {!isSuccess ? (
+              <>
+                <TimeLoader />
+                <motion.p
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="text-white font-medium"
+                >
+                  {processingStep}
+                </motion.p>
+              </>
+            ) : (
+              <motion.div
+                initial={{ scale: 0.5, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                className="flex flex-col items-center gap-4"
+              >
+                <div className="text-[#4CAF50] text-5xl">✓</div>
+                <p className="text-white font-medium">{processingStep}</p>
+              </motion.div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
             </motion.div>
 
             {/* Chart Section */}

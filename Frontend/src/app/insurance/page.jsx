@@ -1,15 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import InsuranceModal from "../components/InsuranceModal";
 import InsuranceStatsCard from "../components/InsuranceStatsCard";
 import { FaShieldAlt, FaCoins, FaHistory } from "react-icons/fa";
 import Navbar from "../components/Navbar";
 import SqueezeButton from "../components/SqueezeButton";
+import TimeLoader from "../components/TimeLoader";
 
 export default function Insurance() {
   const [showInsuranceModal, setShowInsuranceModal] = useState(false);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
 
   const stats = [
     {
@@ -49,6 +51,28 @@ export default function Insurance() {
       status: "Rejected"
     }
   ];
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsInitialLoading(false);
+    }, 2000);
+
+    return () => clearTimeout(timer);
+  }, []);
+
+  if (isInitialLoading) {
+    return (
+      <div className="relative z-10 font-['Quantify'] tracking-[1px] bg-[#0D1117] min-h-screen flex flex-col">
+        <Navbar />
+        <div className="flex-grow flex flex-col items-center justify-center">
+          <TimeLoader />
+          <p className="text-white mt-4 font-['Quantify']">
+            Loading Insurance Data
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative z-10 font-['Quantify'] tracking-[1px] bg-[#0D1117] min-h-screen flex flex-col">

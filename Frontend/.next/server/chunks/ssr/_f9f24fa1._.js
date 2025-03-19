@@ -22,39 +22,173 @@ __turbopack_context__.n(__turbopack_context__.i("[project]/src/app/layout.tsx [a
 var { g: global, __dirname, m: module, e: exports } = __turbopack_context__;
 {
 // "use client";
+// import { motion } from "framer-motion";
 // import Image from "next/image";
 // import { Space_Grotesk } from "next/font/google";
 // import bg from "./assets/bg1.jpg";
 // import Navbar from "./components/Navbar";
 // import HeroSection from "./components/HeroSection";
+// import Features from "./components/Features";
+// import Footer from "./components/Footer";
 // import btcflow from "./assets/btc-flow.svg";
 // const spaceGrotesk = Space_Grotesk({
 //   subsets: ["latin"],
 //   weight: ["300", "400", "500", "600", "700"]
 // });
+// // Enhanced Animation variants
+// const fadeInUp = {
+//   hidden: { opacity: 0, y: 20 },
+//   visible: {
+//     opacity: 1,
+//     y: 0,
+//     transition: {
+//       duration: 0.6,
+//       ease: "easeOut"
+//     }
+//   }
+// };
+// const staggerContainer = {
+//   hidden: { opacity: 0 },
+//   visible: {
+//     opacity: 1,
+//     transition: {
+//       staggerChildren: 0.2
+//     }
+//   }
+// };
+// // New text animation variants
+// const textFadeIn = {
+//   hidden: {
+//     opacity: 0,
+//     y: 30
+//   },
+//   visible: {
+//     opacity: 1,
+//     y: 0,
+//     transition: {
+//       duration: 0.8,
+//       ease: "easeOut"
+//     }
+//   }
+// };
+// const letterAnimation = {
+//   hidden: { opacity: 0, y: 50 },
+//   visible: {
+//     opacity: 1,
+//     y: 0,
+//   }
+// };
+// const textContainer = {
+//   hidden: { opacity: 0 },
+//   visible: (i = 1) => ({
+//     opacity: 1,
+//     transition: { staggerChildren: 0.03, delayChildren: 0.2 * i },
+//   }),
+// };
 // export default function Home() {
+//   const AnimatedText = ({ text, className }) => {
+//     return (
+//       <motion.span
+//         className={`inline-block ${className}`}
+//         variants={textContainer}
+//         initial="hidden"
+//         animate="visible"
+//       >
+//         {text.split("").map((char, index) => (
+//           <motion.span
+//             key={index}
+//             className="inline-block"
+//             variants={letterAnimation}
+//           >
+//             {char}
+//           </motion.span>
+//         ))}
+//       </motion.span>
+//     );
+//   };
 //   return (
-//     <main className={`relative min-h-screen w-full ${spaceGrotesk.className}`}>
-//       <div className=" font-['Quantify']">
-//         <div className="absolute inset-0 max-w-screen max-h-screen -z-10">
-//           <Image
-//             src={bg}
-//             alt="Background globe icon"
-//             fill
-//             className="object-cover opacity-[0.05]"
-//             priority
-//           />
-//         </div>
-//         <div className="relative z-10 font-['Quantify'] tracking-[1px] ">
-//           <Navbar />
-//           <HeroSection />
-//         </div>
-//         <div className="flex justify-center bg-[#0D1117]">
-//           <p className="text-[40px]">Architecture Flow</p>
-//           <Image src={btcflow} alt="flow" className="w-fit h-fit" />
-//         </div>
+//     <motion.main
+//       className={`relative w-full ${spaceGrotesk.className}`}
+//       initial="hidden"
+//       animate="visible"
+//       variants={staggerContainer}
+//     >
+//       <div className="font-['Quantify']">
+//         <motion.div
+//           className="relative min-h-screen"
+//           variants={fadeInUp}
+//         >
+//           <div className="absolute inset-0 w-full h-full -z-10">
+//             <Image
+//               src={bg}
+//               alt="Background globe icon"
+//               fill
+//               className="object-cover opacity-[0.05] transform scale-100 hover:scale-105 transition-transform duration-700"
+//               priority
+//               sizes="(max-width: 768px) 100vw, (max-width: 1200px) 100vw, 100vw"
+//             />
+//           </div>
+//           <div className="relative z-10 font-['Quantify'] tracking-[1px]">
+//             <Navbar />
+//             <HeroSection />
+//           </div>
+//         </motion.div>
+//         <motion.div
+//           className="flex flex-col items-center bg-[#0D1117] rounded-4xl px-4 sm:px-6 lg:px-8"
+//           variants={fadeInUp}
+//         >
+//           <motion.h2
+//             className="text-center text-[32px] sm:text-[38px] md:text-[44px] font-bold text-white tracking-wide relative pt-10"
+//             variants={textFadeIn}
+//           >
+//             <span className="relative inline-block">
+//               <AnimatedText
+//                 text="Architecture Flow"
+//                 className="bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-300"
+//               />
+//               <motion.div
+//                 className="absolute inset-0 bg-gradient-to-r from-[#2F80ED]/20 via-[#F7931A]/20 to-[#2F80ED]/20 blur-xl -z-10"
+//                 animate={{
+//                   opacity: [0.5, 1, 0.5],
+//                   scale: [1, 1.05, 1]
+//                 }}
+//                 transition={{
+//                   duration: 3,
+//                   repeat: Infinity,
+//                   ease: "linear"
+//                 }}
+//               />
+//             </span>
+//           </motion.h2>
+//           <motion.div
+//             initial={{ opacity: 0, scale: 0.95 }}
+//             animate={{ opacity: 1, scale: 1 }}
+//             transition={{ duration: 0.8 }}
+//             className="w-full overflow-hidden"
+//           >
+//             <Image
+//               src={btcflow}
+//               alt="flow"
+//               className="w-full max-w-[1200px] px-4 transform hover:scale-[1.02] transition-transform duration-500"
+//               priority
+//               sizes="(max-width: 768px) 90vw, (max-width: 1200px) 95vw, 1200px"
+//             />
+//           </motion.div>
+//           <motion.div
+//             variants={fadeInUp}
+//             className="w-full"
+//           >
+//             <Features />
+//           </motion.div>
+//         </motion.div>
+//         <motion.footer
+//           variants={fadeInUp}
+//           className="w-full"
+//         >
+//           <Footer />
+//         </motion.footer>
 //       </div>
-//     </main>
+//     </motion.main>
 //   );
 // }
 }}),
