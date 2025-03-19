@@ -1,8 +1,7 @@
-import { type PublicClient, getPublicClient } from "wagmi";
+import { getPublicClient } from "@wagmi/core";
 import { providers } from "ethers";
-import { type HttpTransport } from "viem";
 
-export function publicClientToProvider(publicClient: PublicClient) {
+export function publicClientToProvider(publicClient) {
   const { chain, transport } = publicClient;
   const network = {
     chainId: chain.id,
@@ -11,7 +10,7 @@ export function publicClientToProvider(publicClient: PublicClient) {
   };
   if (transport.type === "fallback")
     return new providers.FallbackProvider(
-      (transport.transports as ReturnType<HttpTransport>[]).map(
+      transport.transports.map(
         ({ value }) => new providers.JsonRpcProvider(value?.url, network)
       )
     );
@@ -19,7 +18,7 @@ export function publicClientToProvider(publicClient: PublicClient) {
 }
 
 /** Action to convert a viem Public Client to an ethers.js Provider. */
-export function getEthersProvider({ chainId }: { chainId?: number } = {}) {
+export function getEthersProvider({ chainId } = {}) {
   const publicClient = getPublicClient({ chainId });
   return publicClientToProvider(publicClient);
 }
