@@ -2,12 +2,50 @@
 pragma solidity ^0.8.0;
 
 /**
- * @title InsurancePool
- * @dev A contract that allows users to apply for insurance with liquidation and slashing protection
+ * @title IERC20
+ * @dev Interface for the ERC20 standard token.
  */
-contract InsurancePool {
+interface IERC20 {
+    function totalSupply() external view returns (uint256);
+
+    function balanceOf(address account) external view returns (uint256);
+
+    function transfer(
+        address recipient,
+        uint256 amount
+    ) external returns (bool);
+
+    function allowance(
+        address owner,
+        address spender
+    ) external view returns (uint256);
+
+    function approve(address spender, uint256 amount) external returns (bool);
+
+    function transferFrom(
+        address sender,
+        address recipient,
+        uint256 amount
+    ) external returns (bool);
+
+    event Transfer(address indexed from, address indexed to, uint256 value);
+    event Approval(
+        address indexed owner,
+        address indexed spender,
+        uint256 value
+    );
+}
+
+/**
+ * @title InsurancePoolToken
+ * @dev A contract that allows users to apply for insurance with liquidation and slashing protection using lstBTC token
+ */
+contract InsurancePoolToken {
     // Contract owner/admin
     address public admin;
+
+    // Token contract address
+    IERC20 public lstBTC;
 
     // Insurance application status
     enum ApplicationStatus {
@@ -61,7 +99,7 @@ contract InsurancePool {
     // Total number of applications
     uint256 public applicationCount;
 
-    // Contract balance
+    // Contract token balance
     uint256 public poolBalance;
 
     // Events
@@ -109,10 +147,13 @@ contract InsurancePool {
     }
 
     /**
-     * @dev Constructor sets the contract admin and default interest tiers
+     * @dev Constructor sets the contract admin, token address, and default interest tiers
+     * @param _tokenAddress The address of the lstBTC token contract
      */
-    constructor() {
+    constructor(address _tokenAddress) {
+        require(_tokenAddress != address(0), "Token address cannot be zero");
         admin = msg.sender;
+        lstBTC = IERC20(_tokenAddress);
         applicationCount = 0;
 
         // Set up default interest tiers
@@ -336,10 +377,10 @@ contract InsurancePool {
         );
         poolBalance -= application.coverageAmount;
 
-        (bool success, ) = application.applicant.call{
-            value: application.coverageAmount
-        }("");
-        require(success, "Transfer failed");
+        require(
+            lstBTC.transfer(application.applicant, application.coverageAmount),
+            "Token transfer failed"
+        );
 
         emit InsurancePaid(
             _applicationId,
@@ -356,8 +397,12 @@ contract InsurancePool {
     /**
      * @dev Allows users to repay their insurance
      * @param _applicationId The ID of the active insurance
+     * @param _repaymentAmount The amount to repay
      */
-    function repayInsurance(uint256 _applicationId) external payable {
+    function repayInsurance(
+        uint256 _applicationId,
+        uint256 _repaymentAmount
+    ) external {
         require(_applicationId < applicationCount, "Invalid application ID");
 
         InsuranceApplication storage application = applications[_applicationId];
@@ -374,14 +419,20 @@ contract InsurancePool {
         uint256 remainingAmount = application.totalAmountDue -
             application.amountRepaid;
         require(
-            msg.value > 0 && msg.value <= remainingAmount,
+            _repaymentAmount > 0 && _repaymentAmount <= remainingAmount,
             "Invalid repayment amount"
         );
 
-        application.amountRepaid += msg.value;
-        poolBalance += msg.value;
+        // Transfer tokens from user to contract
+        require(
+            lstBTC.transferFrom(msg.sender, address(this), _repaymentAmount),
+            "Token transfer failed"
+        );
 
-        emit RepaymentReceived(_applicationId, msg.sender, msg.value);
+        application.amountRepaid += _repaymentAmount;
+        poolBalance += _repaymentAmount;
+
+        emit RepaymentReceived(_applicationId, msg.sender, _repaymentAmount);
 
         // Check if fully repaid
         if (application.amountRepaid >= application.totalAmountDue) {
@@ -456,10 +507,10 @@ contract InsurancePool {
         );
         poolBalance -= _liquidationAmount;
 
-        (bool success, ) = application.applicant.call{
-            value: _liquidationAmount
-        }("");
-        require(success, "Transfer failed");
+        require(
+            lstBTC.transfer(application.applicant, _liquidationAmount),
+            "Token transfer failed"
+        );
 
         // Update the total amount due to include the liquidation amount
         application.totalAmountDue += _liquidationAmount;
@@ -505,8 +556,10 @@ contract InsurancePool {
         require(poolBalance >= _slashAmount, "Insufficient funds in the pool");
         poolBalance -= _slashAmount;
 
-        (bool success, ) = application.applicant.call{value: _slashAmount}("");
-        require(success, "Transfer failed");
+        require(
+            lstBTC.transfer(application.applicant, _slashAmount),
+            "Token transfer failed"
+        );
 
         // Update the total amount due to include the slashed amount
         application.totalAmountDue += _slashAmount;
@@ -577,17 +630,25 @@ contract InsurancePool {
     }
 
     /**
-     * @dev Allows anyone to deposit funds into the insurance pool
+     * @dev Allows anyone to deposit tokens into the insurance pool
+     * @param _amount The amount of tokens to deposit
      */
-    function depositToPool() external payable {
-        require(msg.value > 0, "Must deposit some amount");
-        poolBalance += msg.value;
+    function depositToPool(uint256 _amount) external {
+        require(_amount > 0, "Must deposit some amount");
 
-        emit FundsDeposited(msg.sender, msg.value);
+        // Transfer tokens from user to contract
+        require(
+            lstBTC.transferFrom(msg.sender, address(this), _amount),
+            "Token transfer failed"
+        );
+
+        poolBalance += _amount;
+
+        emit FundsDeposited(msg.sender, _amount);
     }
 
     /**
-     * @dev Allows admin to withdraw funds from the pool
+     * @dev Allows admin to withdraw tokens from the pool
      * @param _amount The amount to withdraw
      */
     function withdrawFromPool(uint256 _amount) external onlyAdmin {
@@ -595,8 +656,7 @@ contract InsurancePool {
 
         poolBalance -= _amount;
 
-        (bool success, ) = admin.call{value: _amount}("");
-        require(success, "Transfer failed");
+        require(lstBTC.transfer(admin, _amount), "Token transfer failed");
     }
 
     /**
@@ -684,10 +744,22 @@ contract InsurancePool {
     }
 
     /**
-     * @dev Fallback function to accept ETH
+     * @dev Returns the token balance of the contract
+     * @return The token balance
      */
-    receive() external payable {
-        poolBalance += msg.value;
-        emit FundsDeposited(msg.sender, msg.value);
+    function getContractTokenBalance() external view returns (uint256) {
+        return lstBTC.balanceOf(address(this));
+    }
+
+    /**
+     * @dev Updates the token address in case of token migration
+     * @param _newTokenAddress The address of the new token contract
+     */
+    function updateTokenAddress(address _newTokenAddress) external onlyAdmin {
+        require(
+            _newTokenAddress != address(0),
+            "New token address cannot be zero"
+        );
+        lstBTC = IERC20(_newTokenAddress);
     }
 }
