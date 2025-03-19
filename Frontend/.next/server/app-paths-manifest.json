@@ -7,5 +7,6 @@
   "/insurance/page": "app/insurance/page.js",
   "/loan/page": "app/loan/page.js",
   "/page": "app/page.js",
+  "/profile/page": "app/profile/page.js",
   "/stablecoin-loan/page": "app/stablecoin-loan/page.js"
 }

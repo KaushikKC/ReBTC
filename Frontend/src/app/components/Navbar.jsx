@@ -4,11 +4,12 @@ import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import btc from "../assets/btc.svg";
 import Button from "./Button";
+import Link from "next/link";
 
 function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
 
-  const menuItems = ["HOME", "DASHBOARD", "PROFILE", "ABOUT", "CONNECT WALLET"];
+  const menuItems = ["DASHBOARD", "PROFILE", "ABOUT", "CONNECT WALLET"];
 
   const handleWalletConnect = () => {
     // Add your wallet connection logic here
@@ -50,7 +51,7 @@ function Navbar() {
 
   return (
     <nav className="fixed top-0 left-0 w-full z-50 p-5 flex justify-between">
-      <div className="flex space-x-1 items-center">
+      <Link href="/" className="flex space-x-1 items-center">
         <p className="text-[30px] font-medium text-white">Re</p>
         <Image
           src={btc}
@@ -59,7 +60,7 @@ function Navbar() {
           height={21}
           className="h-[50px] w-[50px]"
         />
-      </div>
+      </Link>
 
       <div className="hidden lg:flex gap-8">
         {menuItems.map(item => renderMenuItem(item))}
