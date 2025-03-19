@@ -22,6 +22,7 @@
 
 0x9F384C8dA02CBFA67CE9b3BDddED49c7bB327dc9 -> LstBTC (Owner being our address ; above contract is vaultAddress being owner)
 
-0x9F8d1c2429Fa9821570d8669A4E739A2f6D131EC -> FlashLoan.sol(transfers the lstBTC to the insurancePool)
+0x19079b097C72e5A2520Ee4fA8Ef1B9f9DDd75Fcf -> FlashLoan.sol(transfers the lstBTC to the insurancePool)
 
 1,000,000,000,000,000,000,000
+18 decimals for LstBTC, USDT,USDC
