@@ -613,7 +613,17 @@ contract InsurancePool {
     /**
      * @dev Returns the details of a specific application
      * @param _applicationId The ID of the application
-     * @return The application details
+     * @return applicant The address of the applicant
+     * @return coverageAmount The amount of coverage requested
+     * @return coverageDetails Details about what is being insured
+     * @return timestamp The time when the application was submitted
+     * @return status The current status of the application
+     * @return insuranceType The type of insurance
+     * @return duration The duration of insurance in days
+     * @return interestRate The interest rate applied (APR * 100)
+     * @return totalAmountDue The total amount due including interest
+     * @return repaymentDeadline The deadline for repayment
+     * @return amountRepaid The amount already repaid
      */
     function getApplicationDetails(
         uint256 _applicationId
@@ -655,6 +665,7 @@ contract InsurancePool {
 
     /**
      * @dev Returns the number of interest tiers
+     * @return The count of interest tiers
      */
     function getInterestTiersCount() external view returns (uint256) {
         return interestTiers.length;
