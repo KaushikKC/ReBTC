@@ -4,183 +4,215 @@ pragma solidity ^0.8.19;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 
 /**
- * @title IFlashLoanReceiver
- * @dev Interface for flash loan borrowers
+ * @title SimplifiedLstBtcFlashloan
+ * @dev Direct exchange of lstBTC for stablecoins with a fee
  */
-interface IFlashLoanReceiver {
-    function executeOperation(
-        uint256 amount,
-        uint256 fee,
-        bytes calldata params
-    ) external returns (bool);
-}
+contract SimplifiedLstBtcFlashloan is ReentrancyGuard, Ownable {
+    using SafeMath for uint256;
 
-/**
- * @title ModifiedLstBtcFlashLoan
- * @dev Flash loan provider for lstBTC tokens with direct repayment
- */
-contract ModifiedLstBtcFlashLoan is ReentrancyGuard, Ownable {
     IERC20 public lstBtcToken;
+    IERC20 public usdtToken;
+    IERC20 public usdcToken;
+    address public insurancePoolAddress;
 
-    // Fee percentage in basis points (e.g., 30 = 0.3%)
-    uint256 public flashLoanFeePercentage = 30;
+    // Fee percentage (30% = 3000 basis points)
+    uint256 public feePercentage = 3000;
 
     // Total fees collected
     uint256 public totalFeesCollected;
 
-    // Total liquidity provided
-    uint256 public totalLiquidity;
-
-    // Mapping of liquidity providers to their provided amounts
-    mapping(address => uint256) public liquidityProviders;
-
     // Events
-    event FlashLoan(address indexed receiver, uint256 amount, uint256 fee);
-    event LiquidityAdded(address indexed provider, uint256 amount);
-    event LiquidityRemoved(address indexed provider, uint256 amount);
-    event FeesWithdrawn(address indexed recipient, uint256 amount);
-    event BalanceCheck(string message, uint256 balance);
-
-    constructor(address _owner, address _lstBtcToken) Ownable(_owner) {
-        lstBtcToken = IERC20(_lstBtcToken);
-    }
-
-    /**
-     * @dev Provides a flash loan to the receiver contract
-     * @param receiver The contract receiving the tokens
-     * @param amount The amount of tokens lent
-     * @param params Arbitrary data to pass to the receiver
-     */
-    function flashLoan(
-        address receiver,
+    event Exchange(
+        address indexed user,
+        uint256 lstBtcAmount,
+        uint256 stablecoinAmount,
+        address stablecoinUsed
+    );
+    event StablecoinLiquidityAdded(
+        address indexed provider,
         uint256 amount,
-        bytes calldata params
-    ) external nonReentrant {
-        // Check available liquidity
-        uint256 availableLiquidity = getAvailableLiquidity();
-        require(availableLiquidity >= amount, "Insufficient liquidity");
+        address stablecoinUsed
+    );
+    event FeesWithdrawn(address indexed recipient, uint256 amount);
+    event InsurancePoolFunded(uint256 amount);
 
-        // Calculate fee
-        uint256 fee = (amount * flashLoanFeePercentage) / 10000;
-
-        // Check balance before loan
-        uint256 balanceBefore = lstBtcToken.balanceOf(address(this));
-        emit BalanceCheck("Balance before loan", balanceBefore);
-
-        // Transfer tokens to receiver
-        require(lstBtcToken.transfer(receiver, amount), "Transfer failed");
-
-        // Execute operation on receiver
+    /**
+     * @dev Constructor initializes the contract with token addresses
+     * @param _owner The owner of the contract
+     * @param _lstBtcToken The address of the lstBTC token
+     * @param _usdtToken The address of the USDT token
+     * @param _usdcToken The address of the USDC token
+     * @param _insurancePoolAddress The address of the insurance pool
+     */
+    constructor(
+        address _owner,
+        address _lstBtcToken,
+        address _usdtToken,
+        address _usdcToken,
+        address _insurancePoolAddress
+    ) Ownable(_owner) {
+        require(_lstBtcToken != address(0), "lstBTC address cannot be zero");
+        require(_usdtToken != address(0), "USDT address cannot be zero");
+        require(_usdcToken != address(0), "USDC address cannot be zero");
         require(
-            IFlashLoanReceiver(receiver).executeOperation(amount, fee, params),
-            "Flash loan execution failed"
+            _insurancePoolAddress != address(0),
+            "Insurance pool address cannot be zero"
         );
 
-        // Check balance after execution
-        uint256 balanceAfter = lstBtcToken.balanceOf(address(this));
-        emit BalanceCheck("Balance after execution", balanceAfter);
-
-        // Verify repayment - the balance should be at least the original balance
-        require(
-            balanceAfter >= balanceBefore + fee,
-            "Flash loan not repaid correctly"
-        );
-
-        // Update fees collected
-        totalFeesCollected += fee;
-
-        emit FlashLoan(receiver, amount, fee);
+        lstBtcToken = IERC20(_lstBtcToken);
+        usdtToken = IERC20(_usdtToken);
+        usdcToken = IERC20(_usdcToken);
+        insurancePoolAddress = _insurancePoolAddress;
     }
 
     /**
-     * @dev Add liquidity to the flash loan pool
-     * @param amount Amount of tokens to add
+     * @dev Exchange lstBTC for stablecoins
+     * @param lstBtcAmount Amount of lstBTC to provide (must be 1.3 units)
+     * @param useUsdt Whether to receive USDT (true) or USDC (false)
      */
-    function addLiquidity(uint256 amount) external {
+    function exchangeLstBtcForStablecoin(
+        uint256 lstBtcAmount,
+        bool useUsdt
+    ) external nonReentrant {
+        // Determine which stablecoin to use
+        IERC20 stablecoin = useUsdt ? usdtToken : usdcToken;
+
+        // Calculate stablecoin amount (1 unit for every 1.3 lstBTC)
+        uint256 stablecoinAmount = lstBtcAmount.mul(10).div(13);
+
+        // Check available stablecoin liquidity
+        uint256 availableLiquidity = stablecoin.balanceOf(address(this));
+        require(
+            availableLiquidity >= stablecoinAmount,
+            "Insufficient stablecoin liquidity"
+        );
+
+        // Transfer lstBTC from user to this contract
+        require(
+            lstBtcToken.transferFrom(msg.sender, address(this), lstBtcAmount),
+            "lstBTC transfer failed"
+        );
+
+        // Transfer lstBTC to insurance pool
+        require(
+            lstBtcToken.transfer(insurancePoolAddress, lstBtcAmount),
+            "Transfer to insurance pool failed"
+        );
+
+        // Transfer stablecoin to user
+        require(
+            stablecoin.transfer(msg.sender, stablecoinAmount),
+            "Stablecoin transfer failed"
+        );
+
+        // Update fees collected (0.3 lstBTC per 1 stablecoin)
+        uint256 feeAmount = lstBtcAmount.mul(3).div(13);
+        totalFeesCollected = totalFeesCollected.add(feeAmount);
+
+        emit Exchange(
+            msg.sender,
+            lstBtcAmount,
+            stablecoinAmount,
+            address(stablecoin)
+        );
+        emit InsurancePoolFunded(lstBtcAmount);
+    }
+
+    /**
+     * @dev Add stablecoin liquidity to the contract
+     * @param amount Amount of stablecoins to add
+     * @param useUsdt Whether to add USDT (true) or USDC (false)
+     */
+    function addStablecoinLiquidity(uint256 amount, bool useUsdt) external {
         require(amount > 0, "Amount must be greater than 0");
+
+        IERC20 stablecoin = useUsdt ? usdtToken : usdcToken;
 
         // Transfer tokens from user to this contract
         require(
-            lstBtcToken.transferFrom(msg.sender, address(this), amount),
-            "Transfer failed"
+            stablecoin.transferFrom(msg.sender, address(this), amount),
+            "Stablecoin transfer failed"
         );
 
-        // Update liquidity provider's balance
-        liquidityProviders[msg.sender] += amount;
-
-        // Update total liquidity
-        totalLiquidity += amount;
-
-        emit LiquidityAdded(msg.sender, amount);
+        emit StablecoinLiquidityAdded(msg.sender, amount, address(stablecoin));
     }
 
     /**
-     * @dev Remove liquidity from the flash loan pool
-     * @param amount Amount of tokens to remove
+     * @dev Withdraw stablecoins from the contract (owner only)
+     * @param amount Amount of stablecoins to withdraw
+     * @param useUsdt Whether to withdraw USDT (true) or USDC (false)
      */
-    function removeLiquidity(uint256 amount) external nonReentrant {
+    function withdrawStablecoin(
+        uint256 amount,
+        bool useUsdt
+    ) external onlyOwner nonReentrant {
         require(amount > 0, "Amount must be greater than 0");
+
+        IERC20 stablecoin = useUsdt ? usdtToken : usdcToken;
         require(
-            liquidityProviders[msg.sender] >= amount,
-            "Insufficient liquidity"
+            stablecoin.balanceOf(address(this)) >= amount,
+            "Insufficient stablecoin balance"
         );
 
-        // Calculate available liquidity (excluding fees)
-        uint256 availableLiquidity = getAvailableLiquidity() -
-            totalFeesCollected;
+        // Transfer stablecoins to owner
         require(
-            availableLiquidity >= amount,
-            "Insufficient available liquidity"
+            stablecoin.transfer(owner(), amount),
+            "Stablecoin transfer failed"
         );
-
-        // Update liquidity provider's balance
-        liquidityProviders[msg.sender] -= amount;
-
-        // Update total liquidity
-        totalLiquidity -= amount;
-
-        // Transfer tokens to user
-        require(lstBtcToken.transfer(msg.sender, amount), "Transfer failed");
-
-        emit LiquidityRemoved(msg.sender, amount);
     }
 
     /**
-     * @dev Withdraw collected fees
-     * @param recipient Address to receive the fees
+     * @dev Update the insurance pool address
+     * @param _insurancePoolAddress New insurance pool address
      */
-    function withdrawFees(address recipient) external onlyOwner nonReentrant {
-        require(totalFeesCollected > 0, "No fees to withdraw");
-
-        uint256 feesToWithdraw = totalFeesCollected;
-        totalFeesCollected = 0;
-
-        require(
-            lstBtcToken.transfer(recipient, feesToWithdraw),
-            "Transfer failed"
-        );
-
-        emit FeesWithdrawn(recipient, feesToWithdraw);
-    }
-
-    /**
-     * @dev Set the flash loan fee percentage
-     * @param newFeePercentage New fee percentage in basis points
-     */
-    function setFlashLoanFeePercentage(
-        uint256 newFeePercentage
+    function updateInsurancePoolAddress(
+        address _insurancePoolAddress
     ) external onlyOwner {
-        require(newFeePercentage <= 1000, "Fee percentage too high"); // Max 10%
-        flashLoanFeePercentage = newFeePercentage;
+        require(
+            _insurancePoolAddress != address(0),
+            "Insurance pool address cannot be zero"
+        );
+        insurancePoolAddress = _insurancePoolAddress;
     }
 
     /**
-     * @dev Get available liquidity in the flash loan pool
+     * @dev Update the fee percentage
+     * @param _feePercentage New fee percentage in basis points
+     */
+    function updateFeePercentage(uint256 _feePercentage) external onlyOwner {
+        feePercentage = _feePercentage;
+    }
+
+    /**
+     * @dev Get available liquidity of a specific stablecoin
+     * @param useUsdt Whether to check USDT (true) or USDC (false)
      * @return Available liquidity
      */
-    function getAvailableLiquidity() public view returns (uint256) {
-        return lstBtcToken.balanceOf(address(this));
+    function getAvailableStablecoinLiquidity(
+        bool useUsdt
+    ) public view returns (uint256) {
+        IERC20 stablecoin = useUsdt ? usdtToken : usdcToken;
+        return stablecoin.balanceOf(address(this));
+    }
+
+    /**
+     * @dev Emergency function to recover any tokens accidentally sent to the contract
+     * @param tokenAddress Address of the token to recover
+     * @param amount Amount to recover
+     */
+    function recoverToken(
+        address tokenAddress,
+        uint256 amount
+    ) external onlyOwner nonReentrant {
+        require(amount > 0, "Amount must be greater than 0");
+        IERC20 token = IERC20(tokenAddress);
+        require(
+            token.balanceOf(address(this)) >= amount,
+            "Insufficient token balance"
+        );
+        require(token.transfer(owner(), amount), "Token transfer failed");
     }
 }
