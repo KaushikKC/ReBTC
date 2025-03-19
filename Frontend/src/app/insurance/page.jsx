@@ -4,31 +4,65 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import InsuranceModal from "../components/InsuranceModal";
 import InsuranceStatsCard from "../components/InsuranceStatsCard";
-import { FaShieldAlt, FaCoins, FaHistory } from "react-icons/fa";
+import { FaShieldAlt, FaCoins, FaHistory, FaFileAlt } from "react-icons/fa";
 import Navbar from "../components/Navbar";
 import SqueezeButton from "../components/SqueezeButton";
 import TimeLoader from "../components/TimeLoader";
+import ClaimModal from "../components/ClaimModal";
 
 export default function Insurance() {
   const [showInsuranceModal, setShowInsuranceModal] = useState(false);
+  const [showClaimModal, setShowClaimModal] = useState(false);
+  const [selectedPolicy, setSelectedPolicy] = useState(null);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
 
   const stats = [
     {
       title: "Total Insurance Pool",
       value: "245.8721 BTC",
-      icon: FaShieldAlt
+      icon: FaShieldAlt,
     },
     {
       title: "Total Claims Paid",
       value: "12.4532 BTC",
-      icon: FaCoins
+      icon: FaCoins,
     },
     {
       title: "Active Policies",
       value: "1,234",
-      icon: FaHistory
-    }
+      icon: FaHistory,
+    },
+  ];
+
+  // Sample active insurance policies
+  const activeInsurances = [
+    {
+      id: "INS-001",
+      type: "Liquidation Protection",
+      coverageAmount: "2.5000",
+      premium: "0.0250",
+      startDate: "2024-01-01",
+      endDate: "2024-04-01",
+      status: "Active",
+    },
+    {
+      id: "INS-002",
+      type: "Smart Contract Risk",
+      coverageAmount: "1.7500",
+      premium: "0.0350",
+      startDate: "2024-01-15",
+      endDate: "2024-07-15",
+      status: "Active",
+    },
+    {
+      id: "INS-003",
+      type: "Slashing Protection",
+      coverageAmount: "3.2000",
+      premium: "0.0320",
+      startDate: "2023-12-10",
+      endDate: "2024-03-10",
+      status: "Active",
+    },
   ];
 
   const claims = [
@@ -36,20 +70,20 @@ export default function Insurance() {
       date: "2024-01-15",
       type: "Liquidation Protection",
       amount: "0.5432",
-      status: "Approved"
+      status: "Approved",
     },
     {
       date: "2024-01-14",
       type: "Smart Contract Risk",
       amount: "0.2123",
-      status: "Pending"
+      status: "Pending",
     },
     {
       date: "2024-01-13",
       type: "Slashing Protection",
       amount: "0.3214",
-      status: "Rejected"
-    }
+      status: "Rejected",
+    },
   ];
 
   useEffect(() => {
@@ -59,6 +93,11 @@ export default function Insurance() {
 
     return () => clearTimeout(timer);
   }, []);
+
+  const handleClaimClick = (policy) => {
+    setSelectedPolicy(policy);
+    setShowClaimModal(true);
+  };
 
   if (isInitialLoading) {
     return (
@@ -92,8 +131,7 @@ export default function Insurance() {
                 BTC Insurance Pool
               </h1>
               <p className="text-gray-400 max-w-xl">
-                2024-01-13 Slashing Protection Protect your assets with our
-                comprehensive insurance coverage
+                Protect your assets with our comprehensive insurance coverage
               </p>
             </div>
             <motion.button
@@ -108,8 +146,67 @@ export default function Insurance() {
 
           {/* Stats Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-            {stats.map((stat, index) =>
+            {stats.map((stat, index) => (
               <InsuranceStatsCard key={index} {...stat} />
+            ))}
+          </div>
+
+          {/* Active Insurances Section */}
+          <div className="bg-[#1C2128] rounded-xl p-6 overflow-x-auto mb-8">
+            <h3 className="text-xl font-bold text-white mb-4">
+              Your Active Insurance Policies
+            </h3>
+
+            {activeInsurances.length === 0 ? (
+              <div className="text-center py-8 text-gray-400">
+                You don't have any active insurance policies
+              </div>
+            ) : (
+              <table className="w-full min-w-[800px]">
+                <thead>
+                  <tr className="text-gray-400 text-left">
+                    <th className="pb-4">Policy ID</th>
+                    <th className="pb-4">Type</th>
+                    <th className="pb-4">Coverage</th>
+                    <th className="pb-4">Premium</th>
+                    <th className="pb-4">Expiry</th>
+                    <th className="pb-4">Status</th>
+                    <th className="pb-4">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {activeInsurances.map((policy, index) => (
+                    <motion.tr
+                      key={policy.id}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ delay: index * 0.1 }}
+                      className="border-t border-[#2D333B] text-white"
+                    >
+                      <td className="py-4">{policy.id}</td>
+                      <td className="py-4">{policy.type}</td>
+                      <td className="py-4">{policy.coverageAmount} BTC</td>
+                      <td className="py-4">{policy.premium} BTC</td>
+                      <td className="py-4">{policy.endDate}</td>
+                      <td className="py-4">
+                        <span className="px-3 py-1 rounded-full text-sm bg-green-500/20 text-green-500">
+                          {policy.status}
+                        </span>
+                      </td>
+                      <td className="py-4">
+                        <motion.button
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={() => handleClaimClick(policy)}
+                          className="bg-[#2F80ED] text-white px-4 py-2 rounded-lg text-sm hover:bg-[#2F80ED]/90 transition-colors"
+                        >
+                          Claim
+                        </motion.button>
+                      </td>
+                    </motion.tr>
+                  ))}
+                </tbody>
+              </table>
             )}
           </div>
 
@@ -126,7 +223,7 @@ export default function Insurance() {
                 </tr>
               </thead>
               <tbody>
-                {claims.map((claim, index) =>
+                {claims.map((claim, index) => (
                   <motion.tr
                     key={index}
                     initial={{ opacity: 0 }}
@@ -134,36 +231,43 @@ export default function Insurance() {
                     transition={{ delay: index * 0.1 }}
                     className="text-white"
                   >
-                    <td className="py-3">
-                      {claim.date}
-                    </td>
-                    <td className="py-3">
-                      {claim.type}
-                    </td>
-                    <td className="py-3">
-                      {claim.amount} BTC
-                    </td>
+                    <td className="py-3">{claim.date}</td>
+                    <td className="py-3">{claim.type}</td>
+                    <td className="py-3">{claim.amount} BTC</td>
                     <td className="py-3">
                       <span
-                        className={`px-3 py-1 rounded-full text-sm ${claim.status ===
-                        "Approved"
-                          ? "bg-green-500/20 text-green-500"
-                          : claim.status === "Pending"
+                        className={`px-3 py-1 rounded-full text-sm ${
+                          claim.status === "Approved"
+                            ? "bg-green-500/20 text-green-500"
+                            : claim.status === "Pending"
                             ? "bg-yellow-500/20 text-yellow-500"
-                            : "bg-red-500/20 text-red-500"}`}
+                            : "bg-red-500/20 text-red-500"
+                        }`}
                       >
                         {claim.status}
                       </span>
                     </td>
                   </motion.tr>
-                )}
+                ))}
               </tbody>
             </table>
           </div>
+
           {/* Insurance Modal */}
           <AnimatePresence>
-            {showInsuranceModal &&
-              <InsuranceModal onClose={() => setShowInsuranceModal(false)} />}
+            {showInsuranceModal && (
+              <InsuranceModal onClose={() => setShowInsuranceModal(false)} />
+            )}
+          </AnimatePresence>
+
+          {/* Claim Modal */}
+          <AnimatePresence>
+            {showClaimModal && selectedPolicy && (
+              <ClaimModal
+                policy={selectedPolicy}
+                onClose={() => setShowClaimModal(false)}
+              />
+            )}
           </AnimatePresence>
         </div>
       </div>

@@ -4,11 +4,11 @@ import React, { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Navbar from "../components/Navbar";
 import SqueezeButton from "../components/SqueezeButton";
+import { FaBitcoin, FaChevronDown, FaExchangeAlt } from "react-icons/fa";
 import RepaymentModal from "../components/RepaymentModal";
 import Slider from "rc-slider";
 import "rc-slider/assets/index.css";
 import Chart from "../components/Chart";
-import TimeLoader from "../components/TimeLoader";
 import { useAccount, useBalance } from "wagmi";
 import { usePrivy } from "@privy-io/react-auth";
 import { ethers } from "ethers";
@@ -19,7 +19,7 @@ import { toast } from "react-hot-toast";
 import {
   LENDING_CONTRACT_ADDRESS,
   LENDING_CONTRACT_ABI,
-  BTC_TOKEN_ADDRESS,
+  LSTBTC_TOKEN_ADDRESS,
   USDC_TOKEN_ADDRESS,
   USDT_TOKEN_ADDRESS,
   TOKEN_ABI,
@@ -32,15 +32,12 @@ const StablecoinLoan = () => {
   const [showRepayModal, setShowRepayModal] = useState(false);
   const [selectedLoan, setSelectedLoan] = useState(null);
   const [dueDate, setDueDate] = useState("");
-  const [isInitialLoading, setIsInitialLoading] = useState(true);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [isSuccess, setIsSuccess] = useState(false);
-  const [processingStep, setProcessingStep] = useState("");
-
   const [btcPrice, setBtcPrice] = useState(65000); // Default price, will be fetched from contract
   const [isLoading, setIsLoading] = useState(false);
   const [loanPositions, setLoanPositions] = useState([]);
   const [isLoadingLoans, setIsLoadingLoans] = useState(true);
+  const [hasCollateral, setHasCollateral] = useState(false);
+  const [currentCollateral, setCurrentCollateral] = useState(0);
 
   const MAX_LTV = 75; // Maximum LTV allowed by the contract
 
@@ -51,7 +48,7 @@ const StablecoinLoan = () => {
   // Get BTC balance
   const { data: btcBalanceData } = useBalance({
     address,
-    token: BTC_TOKEN_ADDRESS,
+    token: LSTBTC_TOKEN_ADDRESS,
     watch: true,
   });
 
@@ -59,18 +56,11 @@ const StablecoinLoan = () => {
     ? parseFloat(ethers.utils.formatUnits(btcBalanceData.value, 8))
     : 0;
 
+  // Calculate loan amount based on collateral and LTV
   const calculateLoanAmount = () => {
     if (!collateralAmount) return 0;
     return (collateralAmount * btcPrice * ltvPercentage) / 100;
   };
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setIsInitialLoading(false);
-    }, 2000);
-
-    return () => clearTimeout(timer);
-  }, []);
 
   // Calculate interest rate based on LTV
   const calculateInterestRate = () => {
@@ -92,7 +82,7 @@ const StablecoinLoan = () => {
   useEffect(() => {
     if (address && isConnected) {
       fetchBtcPrice();
-      fetchUserLoans();
+      fetchUserLoanPosition();
     } else {
       setIsLoadingLoans(false);
     }
@@ -107,17 +97,25 @@ const StablecoinLoan = () => {
       );
 
       if (lendingContract) {
-        const price = await lendingContract.getBtcPrice();
-        setBtcPrice(parseFloat(ethers.utils.formatUnits(price, 8)));
+        // Try to get BTC price from contract
+        try {
+          const price = await lendingContract.getBtcPrice();
+          setBtcPrice(parseFloat(ethers.utils.formatUnits(price, 8)));
+        } catch (error) {
+          console.warn(
+            "Could not fetch BTC price from contract, using default",
+            error
+          );
+          // Keep using default price
+        }
       }
     } catch (error) {
-      console.error("Error fetching BTC price:", error);
-      // Fallback to default price if fetch fails
+      console.error("Error initializing lending contract:", error);
     }
   };
 
-  // Fetch user's active loans
-  const fetchUserLoans = async () => {
+  // Fetch user's loan position
+  const fetchUserLoanPosition = async () => {
     try {
       setIsLoadingLoans(true);
 
@@ -127,55 +125,79 @@ const StablecoinLoan = () => {
       );
 
       if (lendingContract && address) {
-        // Get loan count for the user
-        const loanCount = await lendingContract.getUserLoanCount(address);
-        const count = loanCount.toNumber();
+        // Get user's loan position
+        const position = await lendingContract.loanPositions(address);
 
-        const loans = [];
+        // Check if user has collateral
+        const hasCollateralDeposited = position.collateralAmount.gt(0);
+        setHasCollateral(hasCollateralDeposited);
 
-        // Fetch each loan
-        for (let i = 0; i < count; i++) {
-          const loanId = await lendingContract.getUserLoanIdAtIndex(address, i);
-          const loan = await lendingContract.loans(loanId);
+        if (hasCollateralDeposited) {
+          // Format collateral amount
+          const collateralAmount = parseFloat(
+            ethers.utils.formatUnits(position.collateralAmount, 18)
+          ); // lstBTC uses 18 decimals
+          setCurrentCollateral(collateralAmount);
 
-          // Format loan data
-          const formattedLoan = {
-            id: `#${loanId.toString().padStart(3, "0")}`,
-            collateral: parseFloat(
-              ethers.utils.formatUnits(loan.collateralAmount, 8)
-            ),
-            borrowed: parseFloat(
-              ethers.utils.formatUnits(
-                loan.loanAmount,
-                loan.stablecoin === USDC_TOKEN_ADDRESS ? 6 : 6
-              )
-            ), // USDC and USDT both use 6 decimals
-            currency: loan.stablecoin === USDC_TOKEN_ADDRESS ? "USDC" : "USDT",
-            interest: loan.interestRate.toNumber() / 100, // Convert basis points to percentage
-            dueDate: new Date(loan.dueDate.toNumber() * 1000)
-              .toISOString()
-              .split("T")[0],
-            status:
-              Date.now() / 1000 > loan.dueDate.toNumber()
-                ? "overdue"
-                : "active",
-            rawLoanId: loanId.toString(),
-          };
+          // Get total debt
+          const totalDebt = await lendingContract.getTotalDebt(address);
 
-          loans.push(formattedLoan);
+          // Check if user has USDC debt
+          const usdcDebt = position.borrowedUSDC;
+          const hasUsdcDebt = usdcDebt.gt(0);
+
+          // Check if user has USDT debt
+          const usdtDebt = position.borrowedUSDT;
+          const hasUsdtDebt = usdtDebt.gt(0);
+
+          const loans = [];
+
+          // Add USDC loan if exists
+          if (hasUsdcDebt) {
+            const formattedLoan = {
+              id: `USDC-${address.slice(0, 6)}`,
+              collateral: collateralAmount,
+              borrowed: parseFloat(ethers.utils.formatUnits(usdcDebt, 6)), // USDC uses 6 decimals
+              currency: "USDC",
+              interest: 2.5, // This should be fetched from contract if available
+              dueDate: "Ongoing", // Loans don't have fixed due dates in this contract
+              status: "active",
+              type: "usdc",
+            };
+
+            loans.push(formattedLoan);
+          }
+
+          // Add USDT loan if exists
+          if (hasUsdtDebt) {
+            const formattedLoan = {
+              id: `USDT-${address.slice(0, 6)}`,
+              collateral: collateralAmount,
+              borrowed: parseFloat(ethers.utils.formatUnits(usdtDebt, 6)), // USDT uses 6 decimals
+              currency: "USDT",
+              interest: 2.5, // This should be fetched from contract if available
+              dueDate: "Ongoing", // Loans don't have fixed due dates in this contract
+              status: "active",
+              type: "usdt",
+            };
+
+            loans.push(formattedLoan);
+          }
+
+          setLoanPositions(loans);
+        } else {
+          setLoanPositions([]);
         }
-
-        setLoanPositions(loans);
       }
     } catch (error) {
-      console.error("Error fetching user loans:", error);
-      toast.error("Failed to load your loans. Please try again later.");
+      console.error("Error fetching user loan position:", error);
+      toast.error("Failed to load your loan position. Please try again later.");
     } finally {
       setIsLoadingLoans(false);
     }
   };
 
-  // Handle borrowing stablecoins
+  // Handle borrowing stablecoins - this now uses depositCollateral and borrow functions
   const handleBorrow = async () => {
     if (!authenticated || !address) {
       toast.error("Please connect your wallet first");
@@ -196,7 +218,10 @@ const StablecoinLoan = () => {
         LENDING_CONTRACT_ABI
       );
 
-      const btcToken = await getContractInstance(BTC_TOKEN_ADDRESS, TOKEN_ABI);
+      const btcToken = await getContractInstance(
+        LSTBTC_TOKEN_ADDRESS,
+        TOKEN_ABI
+      );
 
       if (!lendingContract || !btcToken) {
         throw new Error("Failed to initialize contracts");
@@ -205,7 +230,7 @@ const StablecoinLoan = () => {
       // Convert collateral amount to wei
       const collateralInWei = ethers.utils.parseUnits(
         collateralAmount,
-        8 // BTC has 8 decimals
+        18 // lstBTC has 18 decimals
       );
 
       // Calculate loan amount in wei
@@ -214,15 +239,8 @@ const StablecoinLoan = () => {
         6 // USDC and USDT both use 6 decimals
       );
 
-      // Get selected stablecoin address
-      const stablecoinAddress =
-        selectedStablecoin === "USDC" ? USDC_TOKEN_ADDRESS : USDT_TOKEN_ADDRESS;
-
-      // Calculate interest rate in basis points (multiply by 100)
-      const interestRateBps = calculateInterestRate() * 100;
-
-      // Approve BTC transfer
-      toast.loading("Approving BTC transfer...");
+      // Step 1: Approve lstBTC transfer for collateral
+      toast.loading("Approving lstBTC transfer...");
       const approveTx = await btcToken.approve(
         LENDING_CONTRACT_ADDRESS,
         collateralInWei
@@ -230,15 +248,18 @@ const StablecoinLoan = () => {
       await approveTx.wait();
       toast.dismiss();
 
-      // Create loan
-      toast.loading("Creating loan...");
-      const borrowTx = await lendingContract.createLoan(
-        collateralInWei,
-        loanAmountInWei,
-        stablecoinAddress,
-        interestRateBps
+      // Step 2: Deposit collateral
+      toast.loading("Depositing collateral...");
+      const depositTx = await lendingContract.depositCollateral(
+        collateralInWei
       );
+      await depositTx.wait();
+      toast.dismiss();
 
+      // Step 3: Borrow stablecoin
+      toast.loading(`Borrowing ${selectedStablecoin}...`);
+      const isUSDT = true;
+      const borrowTx = await lendingContract.borrow(isUSDT, collateralInWei);
       await borrowTx.wait();
       toast.dismiss();
 
@@ -248,7 +269,7 @@ const StablecoinLoan = () => {
 
       // Reset form and refresh loans
       setCollateralAmount("");
-      fetchUserLoans();
+      fetchUserLoanPosition();
     } catch (error) {
       console.error("Borrow error:", error);
       toast.dismiss();
@@ -260,7 +281,7 @@ const StablecoinLoan = () => {
 
   // Handle loan repayment success
   const handleRepaymentSuccess = () => {
-    fetchUserLoans();
+    fetchUserLoanPosition();
   };
 
   return (
@@ -285,10 +306,22 @@ const StablecoinLoan = () => {
               animate={{ opacity: 1, y: 0 }}
               className="bg-[#1C2128] rounded-xl p-6 shadow-lg w-full lg:w-[400px] flex-shrink-0"
             >
+              {/* Current Collateral Display (if any) */}
+              {hasCollateral && (
+                <div className="mb-6 bg-[#2D333B] p-4 rounded-lg">
+                  <h3 className="text-white font-medium mb-2">
+                    Current Collateral
+                  </h3>
+                  <p className="text-xl font-bold text-white">
+                    {currentCollateral.toFixed(8)} lstBTC
+                  </p>
+                </div>
+              )}
+
               {/* Collateral Input */}
               <div className="mb-6">
                 <label className="block text-gray-300 text-sm mb-2">
-                  BTC Collateral Amount
+                  lstBTC Collateral Amount
                 </label>
                 <div className="relative">
                   <input
@@ -311,7 +344,7 @@ const StablecoinLoan = () => {
                   </button>
                 </div>
                 <p className="text-sm text-gray-400 mt-2">
-                  Available: {availableBtcBalance.toFixed(8)} BTC
+                  Available: {availableBtcBalance.toFixed(8)} lstBTC
                 </p>
               </div>
 
@@ -381,12 +414,6 @@ const StablecoinLoan = () => {
                     </p>
                   </div>
                   <div>
-                    <p className="text-gray-400">Repayment Deadline</p>
-                    <p className="text-xl font-bold text-white">
-                      {dueDate || "Calculating..."}
-                    </p>
-                  </div>
-                  <div>
                     <p className="text-gray-400">Current BTC Price</p>
                     <p className="text-xl font-bold text-white">
                       ${btcPrice.toLocaleString()}
@@ -429,40 +456,6 @@ const StablecoinLoan = () => {
               >
                 {isLoading ? "Processing..." : `Borrow ${selectedStablecoin}`}
               </motion.button>
-              <AnimatePresence>
-                {isProcessing && (
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    className="absolute inset-0 bg-[#1C2128]/90 backdrop-blur-sm rounded-xl flex flex-col items-center justify-center gap-4"
-                  >
-                    {!isSuccess ? (
-                      <>
-                        <TimeLoader />
-                        <motion.p
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          className="text-white font-medium"
-                        >
-                          {processingStep}
-                        </motion.p>
-                      </>
-                    ) : (
-                      <motion.div
-                        initial={{ scale: 0.5, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        className="flex flex-col items-center gap-4"
-                      >
-                        <div className="text-[#4CAF50] text-5xl">✓</div>
-                        <p className="text-white font-medium">
-                          {processingStep}
-                        </p>
-                      </motion.div>
-                    )}
-                  </motion.div>
-                )}
-              </AnimatePresence>
             </motion.div>
 
             {/* Chart Section */}
@@ -500,10 +493,9 @@ const StablecoinLoan = () => {
                 <thead>
                   <tr className="text-gray-400 text-left">
                     <th className="pb-4">Loan ID</th>
-                    <th className="pb-4">BTC Collateral</th>
+                    <th className="pb-4">lstBTC Collateral</th>
                     <th className="pb-4">Borrowed Amount</th>
                     <th className="pb-4">Interest Rate</th>
-                    <th className="pb-4">Due Date</th>
                     <th className="pb-4">Status</th>
                     <th className="pb-4">Action</th>
                   </tr>
@@ -513,7 +505,7 @@ const StablecoinLoan = () => {
                     <tr key={loan.id} className="border-t border-[#2D333B]">
                       <td className="py-4 text-white">{loan.id}</td>
                       <td className="py-4 text-white">
-                        {loan.collateral.toFixed(8)} BTC
+                        {loan.collateral.toFixed(8)} lstBTC
                       </td>
                       <td className="py-4 text-white">
                         {loan.borrowed.toLocaleString()} {loan.currency}
@@ -526,7 +518,6 @@ const StablecoinLoan = () => {
                         ).toLocaleString()}{" "}
                         {loan.currency})
                       </td>
-                      <td className="py-4 text-white">{loan.dueDate}</td>
                       <td className="py-4">
                         <span
                           className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
