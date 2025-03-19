@@ -25,4 +25,4 @@
 0x19079b097C72e5A2520Ee4fA8Ef1B9f9DDd75Fcf -> FlashLoan.sol(transfers the lstBTC to the insurancePool)
 
 1,000,000,000,000,000,000,000
-18 decimals for LstBTC, USDT,USDC
+18 decimals for LstBTC,USDT,USDC
