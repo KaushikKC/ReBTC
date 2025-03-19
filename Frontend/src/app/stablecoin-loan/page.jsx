@@ -9,6 +9,21 @@ import RepaymentModal from "../components/RepaymentModal";
 import Slider from "rc-slider";
 import "rc-slider/assets/index.css";
 import Chart from "../components/Chart";
+import { useAccount, useBalance } from "wagmi";
+import { usePrivy } from "@privy-io/react-auth";
+import { ethers } from "ethers";
+import { useDataContext } from "@/context/DataContext";
+import { toast } from "react-hot-toast";
+
+// Import contract constants
+import {
+  LENDING_CONTRACT_ADDRESS,
+  LENDING_CONTRACT_ABI,
+  BTC_TOKEN_ADDRESS,
+  USDC_TOKEN_ADDRESS,
+  USDT_TOKEN_ADDRESS,
+  TOKEN_ABI,
+} from "../../constants/contracts";
 
 const StablecoinLoan = () => {
   const [collateralAmount, setCollateralAmount] = useState("");
@@ -17,23 +32,35 @@ const StablecoinLoan = () => {
   const [showRepayModal, setShowRepayModal] = useState(false);
   const [selectedLoan, setSelectedLoan] = useState(null);
   const [dueDate, setDueDate] = useState("");
+  const [btcPrice, setBtcPrice] = useState(65000); // Default price, will be fetched from contract
+  const [isLoading, setIsLoading] = useState(false);
+  const [loanPositions, setLoanPositions] = useState([]);
+  const [isLoadingLoans, setIsLoadingLoans] = useState(true);
 
-  const MAX_LTV = 75;
-  const btcPrice = 65000; // Example price, should be fetched from API
-  const availableBtcBalance = 2.5;
+  const MAX_LTV = 75; // Maximum LTV allowed by the contract
 
+  const { address, isConnected } = useAccount();
+  const { ready, authenticated } = usePrivy();
+  const { getContractInstance } = useDataContext();
+
+  // Get BTC balance
+  const { data: btcBalanceData } = useBalance({
+    address,
+    token: BTC_TOKEN_ADDRESS,
+    watch: true,
+  });
+
+  const availableBtcBalance = btcBalanceData
+    ? parseFloat(ethers.utils.formatUnits(btcBalanceData.value, 8))
+    : 0;
+
+  // Calculate loan amount based on collateral and LTV
   const calculateLoanAmount = () => {
     if (!collateralAmount) return 0;
-    return collateralAmount * btcPrice * ltvPercentage / 100;
+    return (collateralAmount * btcPrice * ltvPercentage) / 100;
   };
 
-  useEffect(() => {
-    const calculatedDueDate = new Date(
-      Date.now() + 30 * 24 * 60 * 60 * 1000
-    ).toLocaleDateString();
-    setDueDate(calculatedDueDate);
-  }, []);
-
+  // Calculate interest rate based on LTV
   const calculateInterestRate = () => {
     const ltv = ltvPercentage;
     if (ltv <= 50) return 2;
@@ -41,27 +68,188 @@ const StablecoinLoan = () => {
     return 3;
   };
 
-  // Example loan positions data
-  const loanPositions = [
-    {
-      id: "#001",
-      collateral: 0.5,
-      borrowed: 15000,
-      currency: "USDC",
-      interest: 2,
-      dueDate: "2025-04-01",
-      status: "active"
-    },
-    {
-      id: "#002",
-      collateral: 1.0,
-      borrowed: 30000,
-      currency: "USDT",
-      interest: 1.8,
-      dueDate: "2025-04-07",
-      status: "overdue"
+  // Set due date (30 days from now)
+  useEffect(() => {
+    const calculatedDueDate = new Date(
+      Date.now() + 30 * 24 * 60 * 60 * 1000
+    ).toLocaleDateString();
+    setDueDate(calculatedDueDate);
+  }, []);
+
+  // Fetch BTC price and user loans when component mounts or address changes
+  useEffect(() => {
+    if (address && isConnected) {
+      fetchBtcPrice();
+      fetchUserLoans();
+    } else {
+      setIsLoadingLoans(false);
     }
-  ];
+  }, [address, isConnected]);
+
+  // Fetch BTC price from contract or oracle
+  const fetchBtcPrice = async () => {
+    try {
+      const lendingContract = await getContractInstance(
+        LENDING_CONTRACT_ADDRESS,
+        LENDING_CONTRACT_ABI
+      );
+
+      if (lendingContract) {
+        const price = await lendingContract.getBtcPrice();
+        setBtcPrice(parseFloat(ethers.utils.formatUnits(price, 8)));
+      }
+    } catch (error) {
+      console.error("Error fetching BTC price:", error);
+      // Fallback to default price if fetch fails
+    }
+  };
+
+  // Fetch user's active loans
+  const fetchUserLoans = async () => {
+    try {
+      setIsLoadingLoans(true);
+
+      const lendingContract = await getContractInstance(
+        LENDING_CONTRACT_ADDRESS,
+        LENDING_CONTRACT_ABI
+      );
+
+      if (lendingContract && address) {
+        // Get loan count for the user
+        const loanCount = await lendingContract.getUserLoanCount(address);
+        const count = loanCount.toNumber();
+
+        const loans = [];
+
+        // Fetch each loan
+        for (let i = 0; i < count; i++) {
+          const loanId = await lendingContract.getUserLoanIdAtIndex(address, i);
+          const loan = await lendingContract.loans(loanId);
+
+          // Format loan data
+          const formattedLoan = {
+            id: `#${loanId.toString().padStart(3, "0")}`,
+            collateral: parseFloat(
+              ethers.utils.formatUnits(loan.collateralAmount, 8)
+            ),
+            borrowed: parseFloat(
+              ethers.utils.formatUnits(
+                loan.loanAmount,
+                loan.stablecoin === USDC_TOKEN_ADDRESS ? 6 : 6
+              )
+            ), // USDC and USDT both use 6 decimals
+            currency: loan.stablecoin === USDC_TOKEN_ADDRESS ? "USDC" : "USDT",
+            interest: loan.interestRate.toNumber() / 100, // Convert basis points to percentage
+            dueDate: new Date(loan.dueDate.toNumber() * 1000)
+              .toISOString()
+              .split("T")[0],
+            status:
+              Date.now() / 1000 > loan.dueDate.toNumber()
+                ? "overdue"
+                : "active",
+            rawLoanId: loanId.toString(),
+          };
+
+          loans.push(formattedLoan);
+        }
+
+        setLoanPositions(loans);
+      }
+    } catch (error) {
+      console.error("Error fetching user loans:", error);
+      toast.error("Failed to load your loans. Please try again later.");
+    } finally {
+      setIsLoadingLoans(false);
+    }
+  };
+
+  // Handle borrowing stablecoins
+  const handleBorrow = async () => {
+    if (!authenticated || !address) {
+      toast.error("Please connect your wallet first");
+      return;
+    }
+
+    if (!collateralAmount || parseFloat(collateralAmount) <= 0) {
+      toast.error("Please enter a valid collateral amount");
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+
+      // Get contract instances
+      const lendingContract = await getContractInstance(
+        LENDING_CONTRACT_ADDRESS,
+        LENDING_CONTRACT_ABI
+      );
+
+      const btcToken = await getContractInstance(BTC_TOKEN_ADDRESS, TOKEN_ABI);
+
+      if (!lendingContract || !btcToken) {
+        throw new Error("Failed to initialize contracts");
+      }
+
+      // Convert collateral amount to wei
+      const collateralInWei = ethers.utils.parseUnits(
+        collateralAmount,
+        8 // BTC has 8 decimals
+      );
+
+      // Calculate loan amount in wei
+      const loanAmountInWei = ethers.utils.parseUnits(
+        calculateLoanAmount().toString(),
+        6 // USDC and USDT both use 6 decimals
+      );
+
+      // Get selected stablecoin address
+      const stablecoinAddress =
+        selectedStablecoin === "USDC" ? USDC_TOKEN_ADDRESS : USDT_TOKEN_ADDRESS;
+
+      // Calculate interest rate in basis points (multiply by 100)
+      const interestRateBps = calculateInterestRate() * 100;
+
+      // Approve BTC transfer
+      toast.loading("Approving BTC transfer...");
+      const approveTx = await btcToken.approve(
+        LENDING_CONTRACT_ADDRESS,
+        collateralInWei
+      );
+      await approveTx.wait();
+      toast.dismiss();
+
+      // Create loan
+      toast.loading("Creating loan...");
+      const borrowTx = await lendingContract.createLoan(
+        collateralInWei,
+        loanAmountInWei,
+        stablecoinAddress,
+        interestRateBps
+      );
+
+      await borrowTx.wait();
+      toast.dismiss();
+
+      toast.success(
+        `Successfully borrowed ${calculateLoanAmount().toLocaleString()} ${selectedStablecoin}`
+      );
+
+      // Reset form and refresh loans
+      setCollateralAmount("");
+      fetchUserLoans();
+    } catch (error) {
+      console.error("Borrow error:", error);
+      toast.dismiss();
+      toast.error(`Failed to borrow: ${error.message || "Unknown error"}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Handle loan repayment success
+  const handleRepaymentSuccess = () => {
+    fetchUserLoans();
+  };
 
   return (
     <div className="relative z-10 font-['Quantify'] tracking-[1px] bg-[#0D1117] min-h-screen flex flex-col">
@@ -94,20 +282,24 @@ const StablecoinLoan = () => {
                   <input
                     type="number"
                     value={collateralAmount}
-                    onChange={e => setCollateralAmount(e.target.value)}
+                    onChange={(e) => setCollateralAmount(e.target.value)}
                     className="w-full bg-[#2D333B] text-white p-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2F80ED] transition-all"
                     placeholder="0.00"
                     max={availableBtcBalance}
+                    disabled={isLoading}
                   />
                   <button
-                    onClick={() => setCollateralAmount(availableBtcBalance)}
+                    onClick={() =>
+                      setCollateralAmount(availableBtcBalance.toString())
+                    }
                     className="absolute right-3 top-1/2 transform -translate-y-1/2 bg-[#2F80ED] text-white px-3 py-1 rounded-md text-sm hover:bg-[#2F80ED]/80 transition-colors"
+                    disabled={isLoading}
                   >
                     MAX
                   </button>
                 </div>
                 <p className="text-sm text-gray-400 mt-2">
-                  Available: {availableBtcBalance} BTC
+                  Available: {availableBtcBalance.toFixed(8)} BTC
                 </p>
               </div>
 
@@ -124,15 +316,14 @@ const StablecoinLoan = () => {
                   trackStyle={{ backgroundColor: "#F7931A" }}
                   handleStyle={{
                     borderColor: "#F7931A",
-                    backgroundColor: "#F7931A"
+                    backgroundColor: "#F7931A",
                   }}
                   railStyle={{ backgroundColor: "#2D333B" }}
+                  disabled={isLoading}
                 />
                 <div className="flex justify-between text-sm text-gray-400 mt-2">
                   <span>1%</span>
-                  <span>
-                    {MAX_LTV}%
-                  </span>
+                  <span>{MAX_LTV}%</span>
                 </div>
               </div>
 
@@ -142,20 +333,22 @@ const StablecoinLoan = () => {
                   Select Stablecoin
                 </label>
                 <div className="flex gap-4">
-                  {["USDC", "USDT"].map(coin =>
+                  {["USDC", "USDT"].map((coin) => (
                     <motion.button
                       key={coin}
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
                       onClick={() => setSelectedStablecoin(coin)}
-                      className={`flex-1 py-3 rounded-lg transition-colors ${selectedStablecoin ===
-                      coin
-                        ? "bg-[#F7931A] text-white"
-                        : "bg-[#2D333B] text-gray-300"}`}
+                      className={`flex-1 py-3 rounded-lg transition-colors ${
+                        selectedStablecoin === coin
+                          ? "bg-[#F7931A] text-white"
+                          : "bg-[#2D333B] text-gray-300"
+                      }`}
+                      disabled={isLoading}
                     >
                       {coin}
                     </motion.button>
-                  )}
+                  ))}
                 </div>
               </div>
 
@@ -181,20 +374,48 @@ const StablecoinLoan = () => {
                       {dueDate || "Calculating..."}
                     </p>
                   </div>
+                  <div>
+                    <p className="text-gray-400">Current BTC Price</p>
+                    <p className="text-xl font-bold text-white">
+                      ${btcPrice.toLocaleString()}
+                    </p>
+                  </div>
                 </div>
               </div>
+
+              {/* Authentication Check */}
+              {!authenticated && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="text-yellow-400 text-sm mb-4 text-center"
+                >
+                  Please connect your wallet to borrow
+                </motion.div>
+              )}
 
               {/* Borrow Button */}
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
-                disabled={!collateralAmount || collateralAmount <= 0}
+                onClick={handleBorrow}
+                disabled={
+                  !authenticated ||
+                  !collateralAmount ||
+                  collateralAmount <= 0 ||
+                  isLoading
+                }
                 className={`w-full bg-[#F7931A] text-white py-4 rounded-lg font-medium transition-colors
-                ${!collateralAmount || collateralAmount <= 0
-                  ? "opacity-50 cursor-not-allowed"
-                  : "hover:bg-[#F7931A]/90"}`}
+                ${
+                  !authenticated ||
+                  !collateralAmount ||
+                  collateralAmount <= 0 ||
+                  isLoading
+                    ? "opacity-50 cursor-not-allowed"
+                    : "hover:bg-[#F7931A]/90"
+                }`}
               >
-                Borrow {selectedStablecoin}
+                {isLoading ? "Processing..." : `Borrow ${selectedStablecoin}`}
               </motion.button>
             </motion.div>
 
@@ -203,7 +424,7 @@ const StablecoinLoan = () => {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 }}
-              className="flex-grow  rounded-xl p-6 shadow-lg"
+              className="flex-grow rounded-xl p-6 shadow-lg"
             >
               <div className="h-full min-h-[500px] flex items-center justify-center">
                 <Chart />
@@ -219,77 +440,90 @@ const StablecoinLoan = () => {
             className="bg-[#1C2128] rounded-xl p-6 mb-8 shadow-lg overflow-x-auto mx-4 md:mx-8"
           >
             <h2 className="text-2xl font-bold text-white mb-6">Active Loans</h2>
-            <table className="w-full min-w-[800px]">
-              <thead>
-                <tr className="text-gray-400 text-left">
-                  <th className="pb-4">Loan ID</th>
-                  <th className="pb-4">BTC Collateral</th>
-                  <th className="pb-4">Borrowed Amount</th>
-                  <th className="pb-4">Interest Accrued</th>
-                  <th className="pb-4">Due Date</th>
-                  <th className="pb-4">Status</th>
-                  <th className="pb-4">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loanPositions.map(loan =>
-                  <tr key={loan.id} className="border-t border-[#2D333B]">
-                    <td className="py-4 text-white">
-                      {loan.id}
-                    </td>
-                    <td className="py-4 text-white">
-                      {loan.collateral} BTC
-                    </td>
-                    <td className="py-4 text-white">
-                      {loan.borrowed.toLocaleString()} {loan.currency}
-                    </td>
-                    <td className="py-4 text-white">
-                      {loan.interest}% ({(loan.borrowed *
-                        loan.interest /
-                        100).toLocaleString()}{" "}
-                      {loan.currency})
-                    </td>
-                    <td className="py-4 text-white">
-                      {loan.dueDate}
-                    </td>
-                    <td className="py-4">
-                      <span
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                          ${loan.status === "active"
-                            ? "bg-green-100 text-green-800"
-                            : "bg-red-100 text-red-800"}`}
-                      >
-                        {loan.status}
-                      </span>
-                    </td>
-                    <td className="py-4">
-                      <motion.button
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={() => {
-                          setSelectedLoan(loan);
-                          setShowRepayModal(true);
-                        }}
-                        className="bg-[#2F80ED] text-white px-4 py-2 rounded-lg text-sm hover:bg-[#2F80ED]/90 transition-colors"
-                      >
-                        Repay
-                      </motion.button>
-                    </td>
+
+            {isLoadingLoans ? (
+              <div className="text-center py-8 text-gray-400">
+                Loading your loans...
+              </div>
+            ) : loanPositions.length === 0 ? (
+              <div className="text-center py-8 text-gray-400">
+                You don't have any active loans
+              </div>
+            ) : (
+              <table className="w-full min-w-[800px]">
+                <thead>
+                  <tr className="text-gray-400 text-left">
+                    <th className="pb-4">Loan ID</th>
+                    <th className="pb-4">BTC Collateral</th>
+                    <th className="pb-4">Borrowed Amount</th>
+                    <th className="pb-4">Interest Rate</th>
+                    <th className="pb-4">Due Date</th>
+                    <th className="pb-4">Status</th>
+                    <th className="pb-4">Action</th>
                   </tr>
-                )}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {loanPositions.map((loan) => (
+                    <tr key={loan.id} className="border-t border-[#2D333B]">
+                      <td className="py-4 text-white">{loan.id}</td>
+                      <td className="py-4 text-white">
+                        {loan.collateral.toFixed(8)} BTC
+                      </td>
+                      <td className="py-4 text-white">
+                        {loan.borrowed.toLocaleString()} {loan.currency}
+                      </td>
+                      <td className="py-4 text-white">
+                        {loan.interest}% (
+                        {(
+                          (loan.borrowed * loan.interest) /
+                          100
+                        ).toLocaleString()}{" "}
+                        {loan.currency})
+                      </td>
+                      <td className="py-4 text-white">{loan.dueDate}</td>
+                      <td className="py-4">
+                        <span
+                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                            ${
+                              loan.status === "active"
+                                ? "bg-green-100 text-green-800"
+                                : "bg-red-100 text-red-800"
+                            }`}
+                        >
+                          {loan.status}
+                        </span>
+                      </td>
+                      <td className="py-4">
+                        <motion.button
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={() => {
+                            setSelectedLoan(loan);
+                            setShowRepayModal(true);
+                          }}
+                          className="bg-[#2F80ED] text-white px-4 py-2 rounded-lg text-sm hover:bg-[#2F80ED]/90 transition-colors"
+                        >
+                          Repay
+                        </motion.button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </motion.div>
         </div>
       </div>
 
       {/* Repayment Modal */}
       <AnimatePresence>
-        {showRepayModal &&
+        {showRepayModal && (
           <RepaymentModal
             loan={selectedLoan}
             onClose={() => setShowRepayModal(false)}
-          />}
+            onRepaymentSuccess={handleRepaymentSuccess}
+          />
+        )}
       </AnimatePresence>
     </div>
   );

@@ -46,7 +46,11 @@ const DataContextProvider: React.FC<DataContextProviderProps> = ({
     }
   };
 
-  return <DataContext.Provider value={{}}>{children}</DataContext.Provider>;
+  return (
+    <DataContext.Provider value={{ getContractInstance }}>
+      {children}
+    </DataContext.Provider>
+  );
 };
 
 export const useDataContext = () => {

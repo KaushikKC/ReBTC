@@ -7,11 +7,39 @@ import yieldbox from "../assets/yieldbox.svg";
 import SqueezeButton from "../components/SqueezeButton";
 import Image from "next/image";
 import UserDepositsOverview from "../components/UserDepositsOverview";
-import Chart from "../components/Chart";
+import { usePrivy } from "@privy-io/react-auth";
+import { useAccount, useBalance } from "wagmi";
+import { ethers } from "ethers";
+import { useDataContext } from "../../context/DataContext";
+import { toast } from "react-hot-toast";
+
+// ABI for the deposit contract
+const DEPOSIT_CONTRACT_ABI = [
+  "function depositBTC(uint256 amount) external",
+  "function depositWETH(uint256 amount) external",
+  "function btcTotalValueLocked() external view returns (uint256)",
+  "function wethTotalValueLocked() external view returns (uint256)",
+  "function userBtcDeposits(address user) external view returns (uint256 amount, uint256 depositTimestamp)",
+  "function userWethDeposits(address user) external view returns (uint256 amount, uint256 depositTimestamp)",
+];
+
+// Token ABIs for approval
+const TOKEN_ABI = [
+  "function approve(address spender, uint256 amount) external returns (bool)",
+  "function balanceOf(address account) external view returns (uint256)",
+  "function decimals() external view returns (uint8)",
+];
+
+// Contract addresses - replace with your actual deployed contract addresses
+const DEPOSIT_CONTRACT_ADDRESS = "0x922F892557e4CBa52d78dBaE8199cE4836A4cF94"; // Replace with your contract address
+const BTC_TOKEN_ADDRESS = "0x579721ACfFeDD19dC61685d496E68ee346aA100a"; // Replace with BTC token address
+const WBTC_TOKEN_ADDRESS = "0x789..."; // Replace with WBTC token address
+const WETH_TOKEN_ADDRESS = "0x9e42e9D0f548314415833C5F3d69C95774E6c395"; // Replace with WETH token address
+
 const cryptoOptions = [
-  { id: "btc", name: "BTC", balance: "0.5" },
-  { id: "wbtc", name: "wBTC", balance: "0.3" },
-  { id: "lstbtc", name: "lstBTC", balance: "0.2" }
+  { id: "btc", name: "BTC", tokenAddress: BTC_TOKEN_ADDRESS, decimals: 8 },
+  { id: "wbtc", name: "wBTC", tokenAddress: WBTC_TOKEN_ADDRESS, decimals: 8 },
+  { id: "weth", name: "WETH", tokenAddress: WETH_TOKEN_ADDRESS, decimals: 18 },
 ];
 
 function Deposit() {
@@ -19,15 +47,162 @@ function Deposit() {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [amount, setAmount] = useState("");
   const [apy, setApy] = useState(12.5); // Example APY
+  const [isLoading, setIsLoading] = useState(false);
+  const [userBalances, setUserBalances] = useState({});
+  const [tvl, setTvl] = useState({ btc: "0", wbtc: "0", weth: "0" });
+
+  const { ready, authenticated, user: privyUser } = usePrivy();
+  const { address } = useAccount();
+  const { getContractInstance } = useDataContext();
+
+  // Fetch user balances and TVL when component mounts or address changes
+  useEffect(() => {
+    if (address) {
+      fetchUserBalances();
+      fetchTVL();
+    }
+  }, [address]);
+
+  // Fetch user balances for all tokens
+  const fetchUserBalances = async () => {
+    try {
+      const balances = {};
+
+      for (const crypto of cryptoOptions) {
+        const tokenContract = await getContractInstance(
+          crypto.tokenAddress,
+          TOKEN_ABI
+        );
+
+        if (tokenContract) {
+          const balance = await tokenContract.balanceOf(address);
+          const decimals = await tokenContract.decimals();
+
+          // Format balance based on token decimals
+          balances[crypto.id] = ethers.utils.formatUnits(balance, decimals);
+        }
+      }
+
+      setUserBalances(balances);
+    } catch (error) {
+      console.error("Error fetching balances:", error);
+    }
+  };
+
+  // Fetch Total Value Locked from the contract
+  const fetchTVL = async () => {
+    try {
+      const depositContract = await getContractInstance(
+        DEPOSIT_CONTRACT_ADDRESS,
+        DEPOSIT_CONTRACT_ABI
+      );
+
+      if (depositContract) {
+        const btcTVL = await depositContract.btcTotalValueLocked();
+        const wethTVL = await depositContract.wethTotalValueLocked();
+
+        setTvl({
+          btc: ethers.utils.formatUnits(btcTVL, 8), // BTC has 8 decimals
+          wbtc: ethers.utils.formatUnits(btcTVL, 8), // WBTC has 8 decimals
+          weth: ethers.utils.formatUnits(wethTVL, 18), // WETH has 18 decimals
+        });
+      }
+    } catch (error) {
+      console.error("Error fetching TVL:", error);
+    }
+  };
 
   const handleMaxClick = () => {
-    setAmount(selectedCrypto.balance);
+    if (userBalances[selectedCrypto.id]) {
+      setAmount(userBalances[selectedCrypto.id]);
+    }
   };
 
-  const calculateProjectedApy = amount => {
+  const calculateProjectedApy = (amount) => {
     // This is a placeholder calculation - replace with actual APY logic
-    return amount ? (parseFloat(amount) * apy).toFixed(2) : "0.00";
+    return amount ? ((parseFloat(amount) * apy) / 100).toFixed(4) : "0.0000";
   };
+
+  const handleDeposit = async () => {
+    if (!authenticated || !address) {
+      toast.error("Please connect your wallet first");
+      return;
+    }
+
+    if (!amount || parseFloat(amount) <= 0) {
+      toast.error("Please enter a valid amount");
+      return;
+    }
+
+    if (parseFloat(amount) < 0.01) {
+      toast.error(`Minimum deposit required: 0.01 ${selectedCrypto.name}`);
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+
+      // Get token contract instance
+      const tokenContract = await getContractInstance(
+        selectedCrypto.tokenAddress,
+        TOKEN_ABI
+      );
+
+      // Get deposit contract instance
+      const depositContract = await getContractInstance(
+        DEPOSIT_CONTRACT_ADDRESS,
+        DEPOSIT_CONTRACT_ABI
+      );
+
+      if (!tokenContract || !depositContract) {
+        throw new Error("Failed to get contract instances");
+      }
+
+      // Convert amount to token units based on decimals
+      const amountInWei = ethers.utils.parseUnits(
+        amount,
+        selectedCrypto.decimals
+      );
+
+      // First approve the deposit contract to spend tokens
+      const approveTx = await tokenContract.approve(
+        DEPOSIT_CONTRACT_ADDRESS,
+        amountInWei
+      );
+
+      toast.loading("Approving token transfer...");
+      await approveTx.wait();
+      toast.dismiss();
+
+      // Now deposit the tokens
+      let depositTx;
+
+      if (selectedCrypto.id === "btc" || selectedCrypto.id === "wbtc") {
+        depositTx = await depositContract.depositBTC(amountInWei);
+      } else if (selectedCrypto.id === "weth") {
+        depositTx = await depositContract.depositWETH(amountInWei);
+      }
+
+      toast.loading(`Depositing ${selectedCrypto.name}...`);
+      await depositTx.wait();
+      toast.dismiss();
+
+      toast.success(`Successfully deposited ${amount} ${selectedCrypto.name}`);
+
+      // Refresh balances and TVL
+      fetchUserBalances();
+      fetchTVL();
+
+      // Reset amount
+      setAmount("");
+    } catch (error) {
+      console.error("Deposit error:", error);
+      toast.error(`Failed to deposit: ${error.message || "Unknown error"}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="relative z-10 font-['Quantify'] tracking-[1px] bg-[#0D1117] flex flex-col">
       <Navbar />
@@ -41,11 +216,11 @@ function Deposit() {
         </div>
       </div>
 
-      <div className=" px-4 md:px-8 space-y-8 pb-5">
+      <div className="px-4 md:px-8 space-y-8 pb-5">
         {/* User Deposits Overview */}
-
         <UserDepositsOverview />
       </div>
+
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -62,21 +237,19 @@ function Deposit() {
               onClick={() => setIsDropdownOpen(!isDropdownOpen)}
               className="w-full flex items-center justify-between bg-[#2D333B] p-4 rounded-lg hover:bg-[#373E47] transition-colors"
             >
-              <span className="text-white">
-                {selectedCrypto.name}
-              </span>
+              <span className="text-white">{selectedCrypto.name}</span>
               <FaChevronDown className="w-5 h-5 text-gray-400" />
             </button>
 
             {/* Dropdown Menu */}
-            {isDropdownOpen &&
+            {isDropdownOpen && (
               <motion.div
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 className="absolute w-full mt-2 bg-[#2D333B] rounded-lg shadow-xl z-10"
               >
-                {cryptoOptions.map(option =>
+                {cryptoOptions.map((option) => (
                   <button
                     key={option.id}
                     onClick={() => {
@@ -87,15 +260,30 @@ function Deposit() {
                   >
                     {option.name}
                   </button>
-                )}
-              </motion.div>}
+                ))}
+              </motion.div>
+            )}
           </div>
 
           {/* Balance Display */}
           <div className="mt-2 flex justify-between text-sm">
             <span className="text-gray-400">Available Balance:</span>
             <span className="text-white">
-              {selectedCrypto.balance} {selectedCrypto.name}
+              {userBalances[selectedCrypto.id]
+                ? parseFloat(userBalances[selectedCrypto.id]).toFixed(6)
+                : "0.000000"}{" "}
+              {selectedCrypto.name}
+            </span>
+          </div>
+
+          {/* TVL Display */}
+          <div className="mt-1 flex justify-between text-sm">
+            <span className="text-gray-400">Total Value Locked:</span>
+            <span className="text-white">
+              {tvl[selectedCrypto.id]
+                ? parseFloat(tvl[selectedCrypto.id]).toFixed(6)
+                : "0.000000"}{" "}
+              {selectedCrypto.name}
             </span>
           </div>
         </div>
@@ -109,13 +297,15 @@ function Deposit() {
             <input
               type="number"
               value={amount}
-              onChange={e => setAmount(e.target.value)}
+              onChange={(e) => setAmount(e.target.value)}
               className="w-full bg-[#2D333B] text-white p-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2F80ED] transition-all"
               placeholder="0.00"
+              disabled={isLoading}
             />
             <button
               onClick={handleMaxClick}
               className="absolute right-3 top-1/2 transform -translate-y-1/2 bg-[#2F80ED] text-white px-3 py-1 rounded-md text-sm hover:bg-[#2F80ED]/80 transition-colors"
+              disabled={isLoading}
             >
               MAX
             </button>
@@ -129,9 +319,7 @@ function Deposit() {
         >
           <div className="flex justify-between items-center">
             <span className="text-gray-300">Projected APY</span>
-            <span className="text-[#2F80ED] font-bold">
-              {apy}%
-            </span>
+            <span className="text-[#2F80ED] font-bold">{apy}%</span>
           </div>
           <div className="flex justify-between items-center mt-2">
             <span className="text-gray-300">Projected Earnings</span>
@@ -142,23 +330,40 @@ function Deposit() {
         </motion.div>
 
         {/* Minimum Deposit Notice */}
-        {parseFloat(amount) < 0.01 &&
-          amount !== "" &&
+        {parseFloat(amount) < 0.01 && amount !== "" && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             className="text-red-400 text-sm mb-4"
           >
             Minimum deposit required: 0.01 {selectedCrypto.name}
-          </motion.div>}
+          </motion.div>
+        )}
+
+        {/* Authentication Check */}
+        {!authenticated && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="text-yellow-400 text-sm mb-4"
+          >
+            Please connect your wallet to deposit
+          </motion.div>
+        )}
 
         {/* Deposit Button */}
         <motion.button
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
-          className="w-full bg-[#F7931A] text-white py-4 rounded-lg font-medium hover:bg-[#F7931A]/90 transition-colors"
+          className={`w-full ${
+            isLoading
+              ? "bg-gray-500 cursor-not-allowed"
+              : "bg-[#F7931A] hover:bg-[#F7931A]/90 cursor-pointer"
+          } text-white py-4 rounded-lg font-medium transition-colors`}
+          onClick={handleDeposit}
+          disabled={isLoading || !authenticated}
         >
-          Deposit {selectedCrypto.name}
+          {isLoading ? "Processing..." : `Deposit ${selectedCrypto.name}`}
         </motion.button>
       </motion.div>
 
@@ -175,12 +380,12 @@ function Deposit() {
             className="absolute inset-0 bg-gradient-to-r from-[#2F80ED]/20 via-[#F7931A]/20 to-[#2F80ED]/20 blur-xl -z-10"
             animate={{
               opacity: [0.5, 1, 0.5],
-              scale: [1, 1.05, 1]
+              scale: [1, 1.05, 1],
             }}
             transition={{
               duration: 3,
               repeat: Infinity,
-              ease: "linear"
+              ease: "linear",
             }}
           />
         </span>
@@ -188,8 +393,8 @@ function Deposit() {
       <div className="flex justify-center">
         <Image
           src={yieldbox}
-          alt="yeild"
-          className="w-full max-w-[1200px] px-6 "
+          alt="yield"
+          className="w-full max-w-[1200px] px-6"
           priority
         />
       </div>
