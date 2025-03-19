@@ -7,6 +7,14 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 
 /**
+ * @title IBTCInsurancePool
+ * @dev Interface for the BTC Insurance Pool contract
+ */
+interface IBTCInsurancePool {
+    function depositToPool(uint256 _amount) external;
+}
+
+/**
  * @title SimplifiedLstBtcFlashloan
  * @dev Direct exchange of lstBTC for stablecoins with a fee
  */
@@ -16,7 +24,7 @@ contract SimplifiedLstBtcFlashloan is ReentrancyGuard, Ownable {
     IERC20 public lstBtcToken;
     IERC20 public usdtToken;
     IERC20 public usdcToken;
-    address public insurancePoolAddress;
+    IBTCInsurancePool public insurancePool;
 
     // Fee percentage (30% = 3000 basis points)
     uint256 public feePercentage = 3000;
@@ -65,7 +73,7 @@ contract SimplifiedLstBtcFlashloan is ReentrancyGuard, Ownable {
         lstBtcToken = IERC20(_lstBtcToken);
         usdtToken = IERC20(_usdtToken);
         usdcToken = IERC20(_usdcToken);
-        insurancePoolAddress = _insurancePoolAddress;
+        insurancePool = IBTCInsurancePool(_insurancePoolAddress);
     }
 
     /**
@@ -96,11 +104,11 @@ contract SimplifiedLstBtcFlashloan is ReentrancyGuard, Ownable {
             "lstBTC transfer failed"
         );
 
-        // Transfer lstBTC to insurance pool
-        require(
-            lstBtcToken.transfer(insurancePoolAddress, lstBtcAmount),
-            "Transfer to insurance pool failed"
-        );
+        // Approve insurance pool to take lstBTC from this contract
+        lstBtcToken.approve(address(insurancePool), lstBtcAmount);
+
+        // Call depositToPool on the insurance contract
+        insurancePool.depositToPool(lstBtcAmount);
 
         // Transfer stablecoin to user
         require(
@@ -175,7 +183,7 @@ contract SimplifiedLstBtcFlashloan is ReentrancyGuard, Ownable {
             _insurancePoolAddress != address(0),
             "Insurance pool address cannot be zero"
         );
-        insurancePoolAddress = _insurancePoolAddress;
+        insurancePool = IBTCInsurancePool(_insurancePoolAddress);
     }
 
     /**
