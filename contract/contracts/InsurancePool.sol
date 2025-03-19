@@ -15,11 +15,8 @@ contract BTCInsurancePool is Ownable, ReentrancyGuard {
 
     IERC20 public lstBTCToken; // lstBTC token from Yield Vault
 
-    // Insurance application status
-    enum ApplicationStatus {
-        Pending,
-        Approved,
-        Rejected,
+    // Insurance policy status
+    enum PolicyStatus {
         Active,
         Expired,
         Claimed
@@ -39,7 +36,7 @@ contract BTCInsurancePool is Ownable, ReentrancyGuard {
         uint256 coverageAmount;
         string coverageDetails;
         uint256 timestamp;
-        ApplicationStatus status;
+        PolicyStatus status;
         uint256 duration; // in days
         uint256 premium; // Premium amount in lstBTC
         uint256 premiumRate; // Premium rate * 100
@@ -69,24 +66,14 @@ contract BTCInsurancePool is Ownable, ReentrancyGuard {
     uint256 public maxCoveragePerPolicy;
 
     // Events
-    event PolicyApplicationSubmitted(
-        uint256 indexed policyId,
-        address indexed applicant,
-        uint256 coverageAmount
-    );
-    event PolicyStatusChanged(
-        uint256 indexed policyId,
-        ApplicationStatus status
-    );
-    event PremiumPaid(
+    event PolicyCreated(
         uint256 indexed policyId,
         address indexed policyholder,
-        uint256 amount
-    );
-    event PolicyActivated(
-        uint256 indexed policyId,
+        uint256 coverageAmount,
+        uint256 premium,
         uint256 expirationTimestamp
     );
+    event PolicyStatusChanged(uint256 indexed policyId, PolicyStatus status);
     event ClaimPaid(
         uint256 indexed policyId,
         address indexed recipient,
@@ -124,7 +111,7 @@ contract BTCInsurancePool is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @dev Allows users to apply for general insurance
+     * @dev Allows users to apply for insurance and automatically activates the policy
      * @param _coverageAmount The amount of coverage requested
      * @param _coverageDetails Details about what is being insured
      * @param _duration Duration of insurance in days
@@ -141,6 +128,7 @@ contract BTCInsurancePool is Ownable, ReentrancyGuard {
         );
         require(_duration > 0, "Duration must be greater than 0");
 
+        // Calculate premium
         uint256 premiumRate = getPremiumRate(_duration);
         uint256 premium = calculatePremium(
             _coverageAmount,
@@ -148,82 +136,8 @@ contract BTCInsurancePool is Ownable, ReentrancyGuard {
             _duration
         );
 
-        uint256 policyId = policyCount;
-
-        policies[policyId] = InsurancePolicy({
-            policyholder: msg.sender,
-            coverageAmount: _coverageAmount,
-            coverageDetails: _coverageDetails,
-            timestamp: block.timestamp,
-            status: ApplicationStatus.Pending,
-            duration: _duration,
-            premium: premium,
-            premiumRate: premiumRate,
-            expirationTimestamp: 0, // Will be set when activated
-            claimed: false
-        });
-
-        userPolicies[msg.sender].push(policyId);
-        policyCount++;
-
-        emit PolicyApplicationSubmitted(policyId, msg.sender, _coverageAmount);
-    }
-
-    /**
-     * @dev Allows owner to approve an insurance application
-     * @param _policyId The ID of the application to approve
-     */
-    function approvePolicy(uint256 _policyId) external onlyOwner {
-        require(_policyId < policyCount, "Invalid policy ID");
-        require(
-            policies[_policyId].status == ApplicationStatus.Pending,
-            "Policy is not pending"
-        );
-
-        InsurancePolicy storage policy = policies[_policyId];
-        policy.status = ApplicationStatus.Approved;
-
-        emit PolicyStatusChanged(_policyId, ApplicationStatus.Approved);
-    }
-
-    /**
-     * @dev Allows owner to reject an insurance application
-     * @param _policyId The ID of the application to reject
-     */
-    function rejectPolicy(uint256 _policyId) external onlyOwner {
-        require(_policyId < policyCount, "Invalid policy ID");
-        require(
-            policies[_policyId].status == ApplicationStatus.Pending,
-            "Policy is not pending"
-        );
-
-        policies[_policyId].status = ApplicationStatus.Rejected;
-
-        emit PolicyStatusChanged(_policyId, ApplicationStatus.Rejected);
-    }
-
-    /**
-     * @dev Allows users to pay premium and activate an approved policy
-     * @param _policyId The ID of the approved policy
-     */
-    function payPremiumAndActivate(uint256 _policyId) external nonReentrant {
-        require(_policyId < policyCount, "Invalid policy ID");
-
-        InsurancePolicy storage policy = policies[_policyId];
-
-        require(
-            policy.status == ApplicationStatus.Approved,
-            "Policy is not approved"
-        );
-        require(
-            msg.sender == policy.policyholder,
-            "Only policyholder can pay premium"
-        );
-
         // Check if pool has enough capacity for new policy
-        uint256 totalCoverage = getTotalActiveCoverage().add(
-            policy.coverageAmount
-        );
+        uint256 totalCoverage = getTotalActiveCoverage().add(_coverageAmount);
         require(
             poolBalance.mul(10000) >= totalCoverage.mul(minCoverageRatio),
             "Insurance pool undercapitalized"
@@ -231,24 +145,45 @@ contract BTCInsurancePool is Ownable, ReentrancyGuard {
 
         // Transfer premium from user to contract
         require(
-            lstBTCToken.transferFrom(msg.sender, address(this), policy.premium),
+            lstBTCToken.transferFrom(msg.sender, address(this), premium),
             "Premium payment failed"
         );
 
         // Update pool balance
-        poolBalance = poolBalance.add(policy.premium);
+        poolBalance = poolBalance.add(premium);
+
+        // Create policy ID
+        uint256 policyId = policyCount;
 
         // Set expiration timestamp
-        policy.expirationTimestamp =
-            block.timestamp +
-            (policy.duration * 1 days);
+        uint256 expirationTimestamp = block.timestamp + (_duration * 1 days);
 
-        // Update status
-        policy.status = ApplicationStatus.Active;
+        // Create and store the policy
+        policies[policyId] = InsurancePolicy({
+            policyholder: msg.sender,
+            coverageAmount: _coverageAmount,
+            coverageDetails: _coverageDetails,
+            timestamp: block.timestamp,
+            status: PolicyStatus.Active,
+            duration: _duration,
+            premium: premium,
+            premiumRate: premiumRate,
+            expirationTimestamp: expirationTimestamp,
+            claimed: false
+        });
 
-        emit PremiumPaid(_policyId, policy.policyholder, policy.premium);
+        // Associate policy with user
+        userPolicies[msg.sender].push(policyId);
+        policyCount++;
 
-        emit PolicyActivated(_policyId, policy.expirationTimestamp);
+        // Emit event
+        emit PolicyCreated(
+            policyId,
+            msg.sender,
+            _coverageAmount,
+            premium,
+            expirationTimestamp
+        );
     }
 
     /**
@@ -264,10 +199,7 @@ contract BTCInsurancePool is Ownable, ReentrancyGuard {
 
         InsurancePolicy storage policy = policies[_policyId];
 
-        require(
-            policy.status == ApplicationStatus.Active,
-            "Policy is not active"
-        );
+        require(policy.status == PolicyStatus.Active, "Policy is not active");
         require(
             msg.sender == policy.policyholder,
             "Only the policyholder can claim"
@@ -293,11 +225,10 @@ contract BTCInsurancePool is Ownable, ReentrancyGuard {
 
         // Mark policy as claimed
         policy.claimed = true;
-        policy.status = ApplicationStatus.Claimed;
+        policy.status = PolicyStatus.Claimed;
 
         emit ClaimPaid(_policyId, policy.policyholder, _claimAmount);
-
-        emit PolicyStatusChanged(_policyId, ApplicationStatus.Claimed);
+        emit PolicyStatusChanged(_policyId, PolicyStatus.Claimed);
     }
 
     /**
@@ -309,19 +240,16 @@ contract BTCInsurancePool is Ownable, ReentrancyGuard {
 
         InsurancePolicy storage policy = policies[_policyId];
 
-        require(
-            policy.status == ApplicationStatus.Active,
-            "Policy is not active"
-        );
+        require(policy.status == PolicyStatus.Active, "Policy is not active");
         require(
             block.timestamp >= policy.expirationTimestamp,
             "Policy has not expired yet"
         );
         require(!policy.claimed, "Policy has already been claimed");
 
-        policy.status = ApplicationStatus.Expired;
+        policy.status = PolicyStatus.Expired;
 
-        emit PolicyStatusChanged(_policyId, ApplicationStatus.Expired);
+        emit PolicyStatusChanged(_policyId, PolicyStatus.Expired);
     }
 
     /**
@@ -463,7 +391,7 @@ contract BTCInsurancePool is Ownable, ReentrancyGuard {
         for (uint256 i = 0; i < policyCount; i++) {
             InsurancePolicy storage policy = policies[i];
             if (
-                policy.status == ApplicationStatus.Active &&
+                policy.status == PolicyStatus.Active &&
                 !policy.claimed &&
                 block.timestamp < policy.expirationTimestamp
             ) {
@@ -511,5 +439,19 @@ contract BTCInsurancePool is Ownable, ReentrancyGuard {
      */
     function getContractTokenBalance() external view returns (uint256) {
         return lstBTCToken.balanceOf(address(this));
+    }
+
+    /**
+     * @dev Get premium estimate for a potential policy
+     * @param _coverageAmount Amount of coverage requested
+     * @param _duration Duration in days
+     * @return Premium amount in lstBTC
+     */
+    function getPremiumEstimate(
+        uint256 _coverageAmount,
+        uint256 _duration
+    ) external view returns (uint256) {
+        uint256 premiumRate = getPremiumRate(_duration);
+        return calculatePremium(_coverageAmount, premiumRate, _duration);
     }
 }
