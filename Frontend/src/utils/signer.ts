@@ -2,7 +2,28 @@ import * as React from "react";
 import { useWalletClient } from "wagmi";
 import { providers } from "ethers";
 
-export function walletClientToSigner(walletClient: any) {
+interface WalletClientWithRequiredProps {
+  account: {
+    address: string;
+  };
+  chain: {
+    id: number;
+    name: string;
+    contracts?: {
+      ensRegistry?: {
+        address: string;
+      };
+    };
+  };
+  transport: {
+    request: (...args: unknown[]) => Promise<unknown>;
+    [key: string]: unknown;
+  };
+}
+
+export function walletClientToSigner(
+  walletClient: WalletClientWithRequiredProps
+) {
   const { account, chain, transport } = walletClient;
   const network = {
     chainId: chain.id,
@@ -19,7 +40,10 @@ export function useEthersSigner({ chainId }: { chainId?: number } = {}) {
   const { data: walletClient } = useWalletClient({ chainId });
 
   return React.useMemo(
-    () => (walletClient ? walletClientToSigner(walletClient) : undefined),
+    () =>
+      walletClient
+        ? walletClientToSigner(walletClient as WalletClientWithRequiredProps)
+        : undefined,
     [walletClient]
   );
 }

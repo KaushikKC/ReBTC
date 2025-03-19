@@ -2,15 +2,22 @@
 import React, { useState, useEffect, ReactNode } from "react";
 import { useAccount } from "wagmi";
 import { useEthersSigner } from "@/utils/signer";
-import { ethers, Contract } from "ethers";
+import { ethers, Contract, ContractInterface } from "ethers";
 
-interface DataContextProps {}
+// Define a proper interface with the methods we want to expose
+interface DataContextProps {
+  getContractInstance: (
+    contractAddress: string,
+    contractAbi: ContractInterface
+  ) => Promise<Contract | undefined>;
+  activeChain?: number;
+}
 
 interface DataContextProviderProps {
   children: ReactNode;
 }
 
-// Context initialization
+// Context initialization with proper typing
 const DataContext = React.createContext<DataContextProps | undefined>(
   undefined
 );
@@ -31,25 +38,34 @@ const DataContextProvider: React.FC<DataContextProviderProps> = ({
 
   const getContractInstance = async (
     contractAddress: string,
-    contractAbi: any
+    contractAbi: ContractInterface
   ): Promise<Contract | undefined> => {
     try {
+      if (!signer) {
+        console.log("No signer available");
+        return undefined;
+      }
+
       const contractInstance = new ethers.Contract(
         contractAddress,
         contractAbi,
         signer
       );
       return contractInstance;
-    } catch (error) {
-      console.log("Error in deploying contract");
+    } catch (error: unknown) {
+      console.log("Error in deploying contract", error);
       return undefined;
     }
   };
 
+  // Create the context value object
+  const contextValue: DataContextProps = {
+    getContractInstance,
+    activeChain,
+  };
+
   return (
-    <DataContext.Provider value={{ getContractInstance }}>
-      {children}
-    </DataContext.Provider>
+    <DataContext.Provider value={contextValue}>{children}</DataContext.Provider>
   );
 };
 

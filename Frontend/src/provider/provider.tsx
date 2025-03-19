@@ -6,9 +6,14 @@ import { PrivyProvider } from "@privy-io/react-auth";
 import DataContextProvider from "../context/DataContext";
 import { wagmiConfig } from "@/utils/wallet-utils";
 import { chainArray } from "@/utils/chains";
+import { ReactNode } from "react";
 const queryClient = new QueryClient();
 
-const Providers = ({ children }: any) => {
+interface ProvidersProps {
+  children: ReactNode;
+}
+
+const Providers = ({ children }: ProvidersProps) => {
   return (
     <>
       <WagmiConfig config={wagmiConfig}>

@@ -12,7 +12,7 @@ import { useEffect, useState } from "react";
 
 const spaceGrotesk = Space_Grotesk({
   subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700"]
+  weight: ["300", "400", "500", "600", "700"],
 });
 
 // Animation variants
@@ -22,9 +22,9 @@ const pageVariants = {
     opacity: 1,
     transition: {
       staggerChildren: 0.3,
-      duration: 0.6
-    }
-  }
+      duration: 0.6,
+    },
+  },
 };
 
 const sectionVariants = {
@@ -34,9 +34,9 @@ const sectionVariants = {
     y: 0,
     transition: {
       duration: 0.8,
-      ease: "easeOut"
-    }
-  }
+      ease: "easeOut",
+    },
+  },
 };
 
 const backgroundVariants = {
@@ -46,12 +46,13 @@ const backgroundVariants = {
     opacity: 0.05,
     transition: {
       duration: 1.2,
-      ease: "easeOut"
-    }
-  }
+      ease: "easeOut",
+    },
+  },
 };
 
 export default function Home() {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
@@ -68,12 +69,12 @@ export default function Home() {
       >
         <div className="font-['Quantify']">
           {/* Hero Section with Background */}
-          <motion.div 
+          <motion.div
             className="relative min-h-screen"
             variants={sectionVariants}
           >
             {/* Animated Background */}
-            <motion.div 
+            <motion.div
               className="absolute inset-0 w-full h-full -z-10"
               variants={backgroundVariants}
             >
@@ -98,7 +99,7 @@ export default function Home() {
             </motion.div>
 
             {/* Content */}
-            <motion.div 
+            <motion.div
               className="relative z-10 font-['Quantify'] tracking-[1px]"
               variants={sectionVariants}
             >
@@ -108,7 +109,7 @@ export default function Home() {
           </motion.div>
 
           {/* Main Content Section */}
-          <motion.div 
+          <motion.div
             className="flex flex-col items-center bg-[#0D1117] rounded-t-[2.5rem] sm:rounded-t-[3rem] lg:rounded-t-[4rem] relative"
             variants={sectionVariants}
           >
@@ -126,12 +127,12 @@ export default function Home() {
                   className="absolute inset-0 bg-gradient-to-r from-[#2F80ED]/20 via-[#F7931A]/20 to-[#2F80ED]/20 blur-xl -z-10"
                   animate={{
                     opacity: [0.5, 1, 0.5],
-                    scale: [1, 1.05, 1]
+                    scale: [1, 1.05, 1],
                   }}
                   transition={{
                     duration: 3,
                     repeat: Infinity,
-                    ease: "linear"
+                    ease: "linear",
                   }}
                 />
               </span>
@@ -145,19 +146,13 @@ export default function Home() {
             />
 
             {/* Features Section with Enhanced Container */}
-            <motion.div 
-              className="w-full"
-              variants={sectionVariants}
-            >
+            <motion.div className="w-full" variants={sectionVariants}>
               <Features />
             </motion.div>
           </motion.div>
 
           {/* Footer with Animation */}
-          <motion.footer
-            variants={sectionVariants}
-            className="relative z-10"
-          >
+          <motion.footer variants={sectionVariants} className="relative z-10">
             <Footer />
           </motion.footer>
 
