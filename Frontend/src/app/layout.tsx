@@ -2,6 +2,8 @@
 import { Geist, Geist_Mono, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import "./styles/fonts.css";
+import Providers from "../provider/provider";
+import "@rainbow-me/rainbowkit/styles.css";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -30,7 +32,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${spaceGrotesk.variable} font-['Quantify'] antialiased`}
       >
-        {children}
+        <Providers>{children}</Providers>
       </body>
     </html>
   );
