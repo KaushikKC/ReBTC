@@ -18,7 +18,7 @@ interface ILendingProtocol {
 
 /**
  * @title lstBTC Token
- * @dev ERC20 token representing a share in the yield vault
+ * @dev ERC20 token representing a share in the yield vault for BTC
  */
 contract LstBTC is ERC20, Ownable {
     constructor() ERC20("Liquid Staked BTC", "lstBTC") Ownable(msg.sender) {}
@@ -33,54 +33,109 @@ contract LstBTC is ERC20, Ownable {
 }
 
 /**
- * @title BTC Yield Vault
- * @dev Contract for staking BTC/wBTC and earning yield through lending strategies
+ * @title lstWETH Token
+ * @dev ERC20 token representing a share in the yield vault for WETH
  */
-contract BTCYieldVault is Ownable, ReentrancyGuard {
+contract LstWETH is ERC20, Ownable {
+    constructor() ERC20("Liquid Staked WETH", "lstWETH") Ownable(msg.sender) {}
+
+    function mint(address to, uint256 amount) external onlyOwner {
+        _mint(to, amount);
+    }
+
+    function burn(address from, uint256 amount) external onlyOwner {
+        _burn(from, amount);
+    }
+}
+
+/**
+ * @title Dual Token Yield Vault
+ * @dev Contract for staking BTC/wBTC and WETH and earning yield through lending strategies
+ */
+contract DualTokenYieldVault is Ownable, ReentrancyGuard {
     using SafeMath for uint256;
 
-    IERC20 public btcToken; // BTC/wBTC token
-    LstBTC public lstBTCToken; // Liquid staked BTC token
+    // BTC related variables
+    IERC20 public btcToken;
+    LstBTC public lstBTCToken;
+    uint8 public btcDecimals;
+    uint256 public btcTotalDeposited;
+    uint256 public btcTotalValueLocked;
+
+    // WETH related variables
+    IERC20 public wethToken;
+    LstWETH public lstWETHToken;
+    uint8 public wethDecimals;
+    uint256 public wethTotalDeposited;
+    uint256 public wethTotalValueLocked;
+
     ILendingProtocol public lendingProtocol; // Lending protocol (e.g., Aave-like)
 
     uint256 public constant YEAR_IN_SECONDS = 365 days;
     uint256 public lockPeriod = YEAR_IN_SECONDS; // 1 year lock period
-
-    // Decimal adjustment factors
-    uint8 public btcDecimals; // Will be set in constructor
-    uint8 public constant LST_BTC_DECIMALS = 18; // ERC20 default
+    uint8 public constant LST_DECIMALS = 18; // ERC20 default
 
     // User deposit info
     struct UserDeposit {
-        uint256 amount; // Amount of BTC deposited
-        uint256 depositTimestamp; // Time of deposit
+        uint256 amount;
+        uint256 depositTimestamp;
     }
 
-    mapping(address => UserDeposit) public userDeposits;
-    uint256 public totalDeposited; // Total BTC deposited
-    uint256 public totalValueLocked; // Total value locked including earned yield
+    mapping(address => UserDeposit) public userBtcDeposits;
+    mapping(address => UserDeposit) public userWethDeposits;
 
     // Events
-    event Deposit(address indexed user, uint256 amount, uint256 lstBTCAmount);
-    event Withdraw(address indexed user, uint256 amount, uint256 lstBTCAmount);
-    event YieldHarvested(uint256 yieldAmount);
+    event DepositBTC(
+        address indexed user,
+        uint256 amount,
+        uint256 lstBTCAmount
+    );
+    event WithdrawBTC(
+        address indexed user,
+        uint256 amount,
+        uint256 lstBTCAmount
+    );
+    event YieldHarvestedBTC(uint256 yieldAmount);
+
+    event DepositWETH(
+        address indexed user,
+        uint256 amount,
+        uint256 lstWETHAmount
+    );
+    event WithdrawWETH(
+        address indexed user,
+        uint256 amount,
+        uint256 lstWETHAmount
+    );
+    event YieldHarvestedWETH(uint256 yieldAmount);
 
     constructor(
         address _btcToken,
+        address _wethToken,
         address _lendingProtocol
     ) Ownable(msg.sender) {
         btcToken = IERC20(_btcToken);
-        lstBTCToken = new LstBTC();
+        wethToken = IERC20(_wethToken);
         lendingProtocol = ILendingProtocol(_lendingProtocol);
 
+        // Create LST tokens
+        lstBTCToken = new LstBTC();
+        lstWETHToken = new LstWETH();
+
         // Get BTC token decimals
-        // Note: This assumes the token implements the ERC20 decimals() function
-        // If using in Remix with a mock token, ensure it has this function
         try ERC20(_btcToken).decimals() returns (uint8 _decimals) {
             btcDecimals = _decimals;
         } catch {
             // Default to 8 decimals for BTC if the call fails
             btcDecimals = 8;
+        }
+
+        // Get WETH token decimals
+        try ERC20(_wethToken).decimals() returns (uint8 _decimals) {
+            wethDecimals = _decimals;
+        } catch {
+            // Default to 18 decimals for WETH if the call fails
+            wethDecimals = 18;
         }
     }
 
@@ -88,7 +143,7 @@ contract BTCYieldVault is Ownable, ReentrancyGuard {
      * @dev User deposits BTC and receives lstBTC
      * @param amount Amount of BTC to deposit
      */
-    function deposit(uint256 amount) external nonReentrant {
+    function depositBTC(uint256 amount) external nonReentrant {
         require(amount > 0, "Amount must be greater than 0");
 
         // Transfer BTC from user to this contract
@@ -104,14 +159,13 @@ contract BTCYieldVault is Ownable, ReentrancyGuard {
         lendingProtocol.deposit(address(btcToken), amount);
 
         // Calculate lstBTC amount to mint with decimal adjustment
-        // Convert from BTC decimals to lstBTC decimals (18)
         uint256 lstBTCToMint;
-        if (LST_BTC_DECIMALS > btcDecimals) {
+        if (LST_DECIMALS > btcDecimals) {
             // If lstBTC has more decimals than BTC, multiply
-            lstBTCToMint = amount.mul(10 ** (LST_BTC_DECIMALS - btcDecimals));
-        } else if (LST_BTC_DECIMALS < btcDecimals) {
+            lstBTCToMint = amount.mul(10 ** (LST_DECIMALS - btcDecimals));
+        } else if (LST_DECIMALS < btcDecimals) {
             // If lstBTC has fewer decimals than BTC, divide
-            lstBTCToMint = amount.div(10 ** (btcDecimals - LST_BTC_DECIMALS));
+            lstBTCToMint = amount.div(10 ** (btcDecimals - LST_DECIMALS));
         } else {
             // If same number of decimals, 1:1 ratio
             lstBTCToMint = amount;
@@ -121,30 +175,78 @@ contract BTCYieldVault is Ownable, ReentrancyGuard {
         lstBTCToken.mint(msg.sender, lstBTCToMint);
 
         // Update user deposit info
-        userDeposits[msg.sender] = UserDeposit({
-            amount: userDeposits[msg.sender].amount.add(amount),
+        userBtcDeposits[msg.sender] = UserDeposit({
+            amount: userBtcDeposits[msg.sender].amount.add(amount),
             depositTimestamp: block.timestamp
         });
 
         // Update total amounts
-        totalDeposited = totalDeposited.add(amount);
-        totalValueLocked = totalValueLocked.add(amount);
+        btcTotalDeposited = btcTotalDeposited.add(amount);
+        btcTotalValueLocked = btcTotalValueLocked.add(amount);
 
-        emit Deposit(msg.sender, amount, lstBTCToMint);
+        emit DepositBTC(msg.sender, amount, lstBTCToMint);
+    }
+
+    /**
+     * @dev User deposits WETH and receives lstWETH
+     * @param amount Amount of WETH to deposit
+     */
+    function depositWETH(uint256 amount) external nonReentrant {
+        require(amount > 0, "Amount must be greater than 0");
+
+        // Transfer WETH from user to this contract
+        require(
+            wethToken.transferFrom(msg.sender, address(this), amount),
+            "Transfer failed"
+        );
+
+        // Allow lending protocol to use the WETH
+        wethToken.approve(address(lendingProtocol), amount);
+
+        // Deposit into lending protocol
+        lendingProtocol.deposit(address(wethToken), amount);
+
+        // Calculate lstWETH amount to mint with decimal adjustment
+        uint256 lstWETHToMint;
+        if (LST_DECIMALS > wethDecimals) {
+            // If lstWETH has more decimals than WETH, multiply
+            lstWETHToMint = amount.mul(10 ** (LST_DECIMALS - wethDecimals));
+        } else if (LST_DECIMALS < wethDecimals) {
+            // If lstWETH has fewer decimals than WETH, divide
+            lstWETHToMint = amount.div(10 ** (wethDecimals - LST_DECIMALS));
+        } else {
+            // If same number of decimals, 1:1 ratio
+            lstWETHToMint = amount;
+        }
+
+        // Mint lstWETH to user
+        lstWETHToken.mint(msg.sender, lstWETHToMint);
+
+        // Update user deposit info
+        userWethDeposits[msg.sender] = UserDeposit({
+            amount: userWethDeposits[msg.sender].amount.add(amount),
+            depositTimestamp: block.timestamp
+        });
+
+        // Update total amounts
+        wethTotalDeposited = wethTotalDeposited.add(amount);
+        wethTotalValueLocked = wethTotalValueLocked.add(amount);
+
+        emit DepositWETH(msg.sender, amount, lstWETHToMint);
     }
 
     /**
      * @dev User withdraws BTC by burning lstBTC after lock period
      * @param lstBTCAmount Amount of lstBTC to burn
      */
-    function withdraw(uint256 lstBTCAmount) external nonReentrant {
+    function withdrawBTC(uint256 lstBTCAmount) external nonReentrant {
         require(lstBTCAmount > 0, "Amount must be greater than 0");
         require(
             lstBTCToken.balanceOf(msg.sender) >= lstBTCAmount,
             "Insufficient lstBTC balance"
         );
 
-        UserDeposit storage userDeposit = userDeposits[msg.sender];
+        UserDeposit storage userDeposit = userBtcDeposits[msg.sender];
         require(
             block.timestamp >= userDeposit.depositTimestamp + lockPeriod,
             "Lock period not expired"
@@ -171,14 +273,62 @@ contract BTCYieldVault is Ownable, ReentrancyGuard {
             : 0;
 
         // Update totals
-        totalDeposited = totalDeposited > btcToWithdraw
-            ? totalDeposited.sub(btcToWithdraw)
+        btcTotalDeposited = btcTotalDeposited > btcToWithdraw
+            ? btcTotalDeposited.sub(btcToWithdraw)
             : 0;
-        totalValueLocked = totalValueLocked > btcToWithdraw
-            ? totalValueLocked.sub(btcToWithdraw)
+        btcTotalValueLocked = btcTotalValueLocked > btcToWithdraw
+            ? btcTotalValueLocked.sub(btcToWithdraw)
             : 0;
 
-        emit Withdraw(msg.sender, btcToWithdraw, lstBTCAmount);
+        emit WithdrawBTC(msg.sender, btcToWithdraw, lstBTCAmount);
+    }
+
+    /**
+     * @dev User withdraws WETH by burning lstWETH after lock period
+     * @param lstWETHAmount Amount of lstWETH to burn
+     */
+    function withdrawWETH(uint256 lstWETHAmount) external nonReentrant {
+        require(lstWETHAmount > 0, "Amount must be greater than 0");
+        require(
+            lstWETHToken.balanceOf(msg.sender) >= lstWETHAmount,
+            "Insufficient lstWETH balance"
+        );
+
+        UserDeposit storage userDeposit = userWethDeposits[msg.sender];
+        require(
+            block.timestamp >= userDeposit.depositTimestamp + lockPeriod,
+            "Lock period not expired"
+        );
+
+        // Calculate WETH amount to withdraw, including yield
+        uint256 wethToWithdraw = calculateWETHAmount(lstWETHAmount);
+
+        // Withdraw from lending protocol
+        lendingProtocol.withdraw(address(wethToken), wethToWithdraw);
+
+        // Burn lstWETH tokens
+        lstWETHToken.burn(msg.sender, lstWETHAmount);
+
+        // Transfer WETH to user
+        require(
+            wethToken.transfer(msg.sender, wethToWithdraw),
+            "Transfer failed"
+        );
+
+        // Update user deposit
+        userDeposit.amount = userDeposit.amount > wethToWithdraw
+            ? userDeposit.amount.sub(wethToWithdraw)
+            : 0;
+
+        // Update totals
+        wethTotalDeposited = wethTotalDeposited > wethToWithdraw
+            ? wethTotalDeposited.sub(wethToWithdraw)
+            : 0;
+        wethTotalValueLocked = wethTotalValueLocked > wethToWithdraw
+            ? wethTotalValueLocked.sub(wethToWithdraw)
+            : 0;
+
+        emit WithdrawWETH(msg.sender, wethToWithdraw, lstWETHAmount);
     }
 
     /**
@@ -193,17 +343,17 @@ contract BTCYieldVault is Ownable, ReentrancyGuard {
         if (lstBTCTotalSupply == 0) return 0;
 
         // Calculate BTC amount based on the proportion of lstBTC being withdrawn
-        uint256 btcAmount = lstBTCAmount.mul(totalValueLocked).div(
+        uint256 btcAmount = lstBTCAmount.mul(btcTotalValueLocked).div(
             lstBTCTotalSupply
         );
 
         // Convert from lstBTC decimals to BTC decimals
-        if (LST_BTC_DECIMALS > btcDecimals) {
+        if (LST_DECIMALS > btcDecimals) {
             // If lstBTC has more decimals than BTC, divide
-            return btcAmount.div(10 ** (LST_BTC_DECIMALS - btcDecimals));
-        } else if (LST_BTC_DECIMALS < btcDecimals) {
+            return btcAmount.div(10 ** (LST_DECIMALS - btcDecimals));
+        } else if (LST_DECIMALS < btcDecimals) {
             // If lstBTC has fewer decimals than BTC, multiply
-            return btcAmount.mul(10 ** (btcDecimals - LST_BTC_DECIMALS));
+            return btcAmount.mul(10 ** (btcDecimals - LST_DECIMALS));
         } else {
             // If same number of decimals, no adjustment needed
             return btcAmount;
@@ -211,51 +361,120 @@ contract BTCYieldVault is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @dev Harvests yield from lending protocol and updates totalValueLocked
-     * Can be called by admin or automatically by a keeper
+     * @dev Calculate amount of WETH for a given lstWETH amount
+     * @param lstWETHAmount Amount of lstWETH
+     * @return WETH amount including yield
      */
-    function harvestYield() external onlyOwner {
-        uint256 prevTotalValueLocked = totalValueLocked;
+    function calculateWETHAmount(
+        uint256 lstWETHAmount
+    ) public view returns (uint256) {
+        uint256 lstWETHTotalSupply = lstWETHToken.totalSupply();
+        if (lstWETHTotalSupply == 0) return 0;
 
-        // Get current value in lending protocol - this would be implemented
-        // based on specific lending protocol's API
-        uint256 currentValue = getCurrentValueInLendingProtocol();
+        // Calculate WETH amount based on the proportion of lstWETH being withdrawn
+        uint256 wethAmount = lstWETHAmount.mul(wethTotalValueLocked).div(
+            lstWETHTotalSupply
+        );
+
+        // Convert from lstWETH decimals to WETH decimals
+        if (LST_DECIMALS > wethDecimals) {
+            // If lstWETH has more decimals than WETH, divide
+            return wethAmount.div(10 ** (LST_DECIMALS - wethDecimals));
+        } else if (LST_DECIMALS < wethDecimals) {
+            // If lstWETH has fewer decimals than WETH, multiply
+            return wethAmount.mul(10 ** (wethDecimals - LST_DECIMALS));
+        } else {
+            // If same number of decimals, no adjustment needed
+            return wethAmount;
+        }
+    }
+
+    /**
+     * @dev Harvests yield from lending protocol for BTC and updates btcTotalValueLocked
+     */
+    function harvestBTCYield() external onlyOwner {
+        uint256 prevTotalValueLocked = btcTotalValueLocked;
+
+        // Get current value in lending protocol
+        uint256 currentValue = getCurrentBTCValueInLendingProtocol();
 
         require(currentValue >= prevTotalValueLocked, "Value cannot decrease");
 
         uint256 yieldAmount = currentValue.sub(prevTotalValueLocked);
         if (yieldAmount > 0) {
-            totalValueLocked = currentValue;
-            emit YieldHarvested(yieldAmount);
+            btcTotalValueLocked = currentValue;
+            emit YieldHarvestedBTC(yieldAmount);
         }
     }
 
     /**
-     * @dev Get current value in lending protocol
-     * Placeholder implementation - would be customized for specific lending protocol
+     * @dev Harvests yield from lending protocol for WETH and updates wethTotalValueLocked
      */
-    function getCurrentValueInLendingProtocol()
+    function harvestWETHYield() external onlyOwner {
+        uint256 prevTotalValueLocked = wethTotalValueLocked;
+
+        // Get current value in lending protocol
+        uint256 currentValue = getCurrentWETHValueInLendingProtocol();
+
+        require(currentValue >= prevTotalValueLocked, "Value cannot decrease");
+
+        uint256 yieldAmount = currentValue.sub(prevTotalValueLocked);
+        if (yieldAmount > 0) {
+            wethTotalValueLocked = currentValue;
+            emit YieldHarvestedWETH(yieldAmount);
+        }
+    }
+
+    /**
+     * @dev Get current BTC value in lending protocol
+     */
+    function getCurrentBTCValueInLendingProtocol()
         internal
         view
         returns (uint256)
     {
-        // This would be implemented according to specific lending protocol
-        // For now, simulate yield by adding APY-based increase
+        // Simulate yield by adding APY-based increase
         uint256 apy = lendingProtocol.getAPY(address(btcToken));
         uint256 timeWeight = block.timestamp % YEAR_IN_SECONDS; // Simplified
-        uint256 estimatedYield = totalDeposited
+        uint256 estimatedYield = btcTotalDeposited
             .mul(apy)
             .mul(timeWeight)
             .div(YEAR_IN_SECONDS)
             .div(10000);
-        return totalDeposited.add(estimatedYield);
+        return btcTotalDeposited.add(estimatedYield);
     }
 
     /**
-     * @dev Get current APY
+     * @dev Get current WETH value in lending protocol
      */
-    function getCurrentAPY() external view returns (uint256) {
+    function getCurrentWETHValueInLendingProtocol()
+        internal
+        view
+        returns (uint256)
+    {
+        // Simulate yield by adding APY-based increase
+        uint256 apy = lendingProtocol.getAPY(address(wethToken));
+        uint256 timeWeight = block.timestamp % YEAR_IN_SECONDS; // Simplified
+        uint256 estimatedYield = wethTotalDeposited
+            .mul(apy)
+            .mul(timeWeight)
+            .div(YEAR_IN_SECONDS)
+            .div(10000);
+        return wethTotalDeposited.add(estimatedYield);
+    }
+
+    /**
+     * @dev Get current BTC APY
+     */
+    function getBTCAPY() external view returns (uint256) {
         return lendingProtocol.getAPY(address(btcToken));
+    }
+
+    /**
+     * @dev Get current WETH APY
+     */
+    function getWETHAPY() external view returns (uint256) {
+        return lendingProtocol.getAPY(address(wethToken));
     }
 
     /**
