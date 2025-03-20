@@ -395,22 +395,22 @@ exports.monitorUsdtPrice = async (req, res) => {
       // Create some default patterns based on current price with slight variations
       usdtSimilarPatterns = [
         {
-          price: usdtData.price * 0.998, // 0.2% lower
+          price: usdtData.price * 0.995, // 0.5% lower
           confidence: usdtData.confidence,
-          publish_time: new Date(Date.now() - 86400000).toISOString(), // 1 day ago
-          score: 0.95,
+          publish_time: new Date(Date.now() - 259200000).toISOString(), // 3 days ago
+          score: 0.85,
         },
         {
-          price: usdtData.price * 1.002, // 0.2% higher
+          price: usdtData.price * 0.997, // 0.3% lower
           confidence: usdtData.confidence,
           publish_time: new Date(Date.now() - 172800000).toISOString(), // 2 days ago
           score: 0.9,
         },
         {
-          price: usdtData.price * 0.997, // 0.3% lower
+          price: usdtData.price * 0.998, // 0.2% lower
           confidence: usdtData.confidence,
-          publish_time: new Date(Date.now() - 259200000).toISOString(), // 3 days ago
-          score: 0.85,
+          publish_time: new Date(Date.now() - 86400000).toISOString(), // 1 day ago
+          score: 0.95,
         },
       ];
     }
