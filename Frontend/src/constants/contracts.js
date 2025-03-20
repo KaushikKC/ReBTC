@@ -8,7 +8,7 @@ export const LSTBTC_TOKEN_ADDRESS =
   "0x9F384C8dA02CBFA67CE9b3BDddED49c7bB327dc9";
 // Contract addresses
 export const LENDING_CONTRACT_ADDRESS =
-  "0x9f001D22425b8d4CFD95a4cFe86183D82F68C4fD";
+  "0x0878fAF7697Ba41B88C1E76CF4BC19A589403C3a";
 export const INSURANCE_CONTRACT_ADDRESS =
   "0x5A7Fd8e5EB1f1F9B0f7F4a83a2D0b5f5F5f5f5f5"; // Replace with actual insurance contract address
 export const FLASH_LOAN_CONTRACT_ADDRESS =
@@ -105,6 +105,7 @@ export const LENDING_CONTRACT_ABI = [
   // Collateral and borrowing functions
   "function depositCollateral(uint256 amount) external",
   "function borrow(bool isUSDT, uint256 amount) external",
+  "function depositAndBorrow(uint256 collateralAmount, uint256 borrowAmount, bool isUSDT) external",
   "function repayUSDC(uint256 amount) external",
   "function repayUSDT(uint256 amount) external",
   "function withdrawCollateral(uint256 amount) external",

@@ -14,7 +14,7 @@ import { usePrivy } from "@privy-io/react-auth";
 import { ethers } from "ethers";
 import { useDataContext } from "@/context/DataContext";
 import { toast } from "react-hot-toast";
-
+import Footer from "../components/Footer";
 // Import contract constants
 import {
   LENDING_CONTRACT_ADDRESS,
@@ -53,13 +53,18 @@ const StablecoinLoan = () => {
   });
 
   const availableBtcBalance = btcBalanceData
-    ? parseFloat(ethers.utils.formatUnits(btcBalanceData.value, 8))
+    ? parseFloat(ethers.utils.formatUnits(btcBalanceData.value, 18)) // lstBTC has 18 decimals
     : 0;
 
   // Calculate loan amount based on collateral and LTV
   const calculateLoanAmount = () => {
     if (!collateralAmount) return 0;
-    return (collateralAmount * btcPrice * ltvPercentage) / 100;
+
+    // Apply 2:1 ratio for lstBTC to USDT/USDC
+    // 2 lstBTC = 1 USDT/USDC in value
+    const collateralValue = collateralAmount / 2;
+
+    return collateralValue;
   };
 
   // Calculate interest rate based on LTV
@@ -197,7 +202,7 @@ const StablecoinLoan = () => {
     }
   };
 
-  // Handle borrowing stablecoins - this now uses depositCollateral and borrow functions
+  // Handle borrowing stablecoins using depositAndBorrow function
   const handleBorrow = async () => {
     if (!authenticated || !address) {
       toast.error("Please connect your wallet first");
@@ -236,7 +241,7 @@ const StablecoinLoan = () => {
       // Calculate loan amount in wei
       const loanAmountInWei = ethers.utils.parseUnits(
         calculateLoanAmount().toString(),
-        6 // USDC and USDT both use 6 decimals
+        18 // USDC and USDT both use 6 decimals
       );
 
       // Step 1: Approve lstBTC transfer for collateral
@@ -248,18 +253,18 @@ const StablecoinLoan = () => {
       await approveTx.wait();
       toast.dismiss();
 
-      // Step 2: Deposit collateral
-      toast.loading("Depositing collateral...");
-      const depositTx = await lendingContract.depositCollateral(
-        collateralInWei
+      // Step 2: Call depositAndBorrow function
+      toast.loading(
+        `Depositing collateral and borrowing ${selectedStablecoin}...`
       );
-      await depositTx.wait();
-      toast.dismiss();
+      const isUSDT = selectedStablecoin === "USDT";
 
-      // Step 3: Borrow stablecoin
-      toast.loading(`Borrowing ${selectedStablecoin}...`);
-      const isUSDT = true;
-      const borrowTx = await lendingContract.borrow(isUSDT, collateralInWei);
+      const borrowTx = await lendingContract.depositAndBorrow(
+        collateralInWei,
+        loanAmountInWei,
+        isUSDT
+      );
+
       await borrowTx.wait();
       toast.dismiss();
 
@@ -273,7 +278,23 @@ const StablecoinLoan = () => {
     } catch (error) {
       console.error("Borrow error:", error);
       toast.dismiss();
-      toast.error(`Failed to borrow: ${error.message || "Unknown error"}`);
+
+      // Handle specific error messages
+      if (error.message.includes("Transfer failed")) {
+        toast.error(
+          "Failed to transfer lstBTC. Please check your balance and approval."
+        );
+      } else if (error.message.includes("Borrow would exceed LTV ratio")) {
+        toast.error(
+          "Borrow amount would exceed the maximum LTV ratio. Please reduce the amount."
+        );
+      } else if (error.message.includes("Insufficient")) {
+        toast.error(
+          `Insufficient ${selectedStablecoin} in the contract. Please try a smaller amount or different stablecoin.`
+        );
+      } else {
+        toast.error(`Failed to borrow: ${error.message || "Unknown error"}`);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -282,6 +303,18 @@ const StablecoinLoan = () => {
   // Handle loan repayment success
   const handleRepaymentSuccess = () => {
     fetchUserLoanPosition();
+  };
+
+  const sectionVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: {
+      opacity: 1,
+      y: 0,
+      transition: {
+        duration: 0.8,
+        ease: "easeOut",
+      },
+    },
   };
 
   return (
@@ -345,6 +378,9 @@ const StablecoinLoan = () => {
                 </div>
                 <p className="text-sm text-gray-400 mt-2">
                   Available: {availableBtcBalance.toFixed(8)} lstBTC
+                </p>
+                <p className="text-sm text-blue-400 mt-1">
+                  Note: 2 lstBTC = 1 {selectedStablecoin} in value
                 </p>
               </div>
 
@@ -417,6 +453,12 @@ const StablecoinLoan = () => {
                     <p className="text-gray-400">Current BTC Price</p>
                     <p className="text-xl font-bold text-white">
                       ${btcPrice.toLocaleString()}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-gray-400">Collateral Ratio</p>
+                    <p className="text-xl font-bold text-white">
+                      2:1 (lstBTC:{selectedStablecoin})
                     </p>
                   </div>
                 </div>
@@ -562,6 +604,10 @@ const StablecoinLoan = () => {
           />
         )}
       </AnimatePresence>
+
+      <motion.footer variants={sectionVariants} className="relative z-10">
+        <Footer />
+      </motion.footer>
     </div>
   );
 };

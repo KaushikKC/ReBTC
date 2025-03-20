@@ -13,7 +13,7 @@ import { ethers } from "ethers";
 import { useDataContext } from "../../context/DataContext";
 import { toast } from "react-hot-toast";
 import TimeLoader from "../components/TimeLoader";
-
+import Footer from "../components/Footer";
 // ABI for the deposit contract
 const DEPOSIT_CONTRACT_ABI = [
   "function depositBTC(uint256 amount) external",
@@ -208,16 +208,28 @@ function Deposit() {
     }
   };
 
+  const sectionVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: {
+      opacity: 1,
+      y: 0,
+      transition: {
+        duration: 0.8,
+        ease: "easeOut",
+      },
+    },
+  };
+
   return (
     <div className="relative z-10 font-['Quantify'] tracking-[1px] bg-[#0D1117] flex flex-col">
       <Navbar />
 
       <div className="flex-grow flex justify-center px-4 pt-32">
-        <div className="flex justify-center pb-10 gap-8">
+        <div className="flex flex-wrap justify-center pb-16 gap-4 md:gap-8 w-full max-w-7xl">
           <SqueezeButton text={"Deposit & Yield Vault"} to="/deposit" />
           <SqueezeButton text={"Borrow Against BTC"} to="/stablecoin-loan" />
-          <SqueezeButton text={"Instant Liquidity "} to="/flash-loan" />
-          <SqueezeButton text={"BTC Insurance Pool "} to="/insurance" />
+          <SqueezeButton text={"Instant Liquidity"} to="/flash-loan" />
+          <SqueezeButton text={"BTC Insurance Pool"} to="/insurance" />
         </div>
       </div>
 
@@ -435,6 +447,20 @@ function Deposit() {
           priority
         />
       </div>
+      <motion.footer variants={sectionVariants} className="relative z-10">
+        <Footer />
+      </motion.footer>
+
+      {/* Page-wide Gradient Effects */}
+      {/* <motion.div
+        className="fixed inset-0 pointer-events-none"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 1.5 }}
+      >
+        <div className="absolute top-0 left-0 w-[500px] h-[500px] bg-[#2F80ED]/10 rounded-full filter blur-[100px] transform -translate-x-1/2 -translate-y-1/2" />
+        <div className="absolute bottom-0 right-0 w-[500px] h-[500px] bg-[#F7931A]/10 rounded-full filter blur-[100px] transform translate-x-1/2 translate-y-1/2" />
+      </motion.div> */}
     </div>
   );
 }

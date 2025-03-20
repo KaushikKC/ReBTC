@@ -11,9 +11,9 @@ import {
   FaBitcoin,
   FaChartLine,
   FaShieldAlt,
-  FaExchangeAlt
+  FaExchangeAlt,
 } from "react-icons/fa";
-
+import Footer from "../components/Footer";
 export default function About() {
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [activeFeature, setActiveFeature] = useState(null);
@@ -47,7 +47,7 @@ export default function About() {
       description:
         "Deposit BTC, wBTC, or LSTs to earn yield with auto-compounding rewards.",
       color: "#F7931A",
-      delay: 0.2
+      delay: 0.2,
     },
     {
       icon: FaChartLine,
@@ -55,7 +55,7 @@ export default function About() {
       description:
         "Borrow USDT/USDC using lstBTC as collateral with automated LTV monitoring.",
       color: "#2F80ED",
-      delay: 0.4
+      delay: 0.4,
     },
     {
       icon: FaExchangeAlt,
@@ -63,7 +63,7 @@ export default function About() {
       description:
         "Instant swaps between lstBTC and BTC with flash loan capabilities.",
       color: "#9945FF",
-      delay: 0.6
+      delay: 0.6,
     },
     {
       icon: FaShieldAlt,
@@ -71,8 +71,8 @@ export default function About() {
       description:
         "Opt-in insurance coverage for staking and borrowing with automated claims.",
       color: "#00C853",
-      delay: 0.8
-    }
+      delay: 0.8,
+    },
   ];
 
   const techStack = [
@@ -82,9 +82,9 @@ export default function About() {
       items: [
         "Solidity (EVM-based chains)",
         "Chainlink Oracles",
-        "LayerZero / CCIP / Axelar"
+        "LayerZero / CCIP / Axelar",
       ],
-      gradient: "from-[#F7931A] to-[#2F80ED]"
+      gradient: "from-[#F7931A] to-[#2F80ED]",
     },
     {
       icon: FaServer,
@@ -92,16 +92,16 @@ export default function About() {
       items: [
         "Node.js / Express.js",
         "MongoDB / PostgreSQL",
-        "Web3.js / Ethers.js"
+        "Web3.js / Ethers.js",
       ],
-      gradient: "from-[#2F80ED] to-[#9945FF]"
+      gradient: "from-[#2F80ED] to-[#9945FF]",
     },
     {
       icon: FaGlobe,
       title: "Frontend",
       items: ["Next.js", "TailwindCSS", "RainbowKit"],
-      gradient: "from-[#9945FF] to-[#00C853]"
-    }
+      gradient: "from-[#9945FF] to-[#00C853]",
+    },
   ];
 
   if (isInitialLoading) {
@@ -117,6 +117,18 @@ export default function About() {
       </div>
     );
   }
+
+  const sectionVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: {
+      opacity: 1,
+      y: 0,
+      transition: {
+        duration: 0.8,
+        ease: "easeOut",
+      },
+    },
+  };
 
   return (
     <div className="relative z-10 font-['Quantify'] tracking-[1px] bg-[#0D1117] min-h-screen overflow-hidden">
@@ -155,7 +167,7 @@ export default function About() {
 
         {/* Features Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-20">
-          {features.map((feature, index) =>
+          {features.map((feature, index) => (
             <motion.div
               key={index}
               className="group relative bg-[#1C2128] rounded-xl p-8 hover:bg-[#2D333B] transition-all duration-300 cursor-pointer overflow-hidden"
@@ -189,7 +201,7 @@ export default function About() {
                 transition={{ duration: 0.3 }}
               />
             </motion.div>
-          )}
+          ))}
         </div>
 
         {/* Tech Stack Section */}
@@ -211,7 +223,7 @@ export default function About() {
             </span>
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {techStack.map((stack, index) =>
+            {techStack.map((stack, index) => (
               <motion.div
                 key={index}
                 className={`relative bg-[#1C2128] rounded-xl p-8 overflow-hidden`}
@@ -231,7 +243,7 @@ export default function About() {
                     </h3>
                   </div>
                   <ul className="space-y-3">
-                    {stack.items.map((item, idx) =>
+                    {stack.items.map((item, idx) => (
                       <motion.li
                         key={idx}
                         className="text-gray-400 flex items-center space-x-2"
@@ -240,15 +252,13 @@ export default function About() {
                         transition={{ delay: 1.4 + idx * 0.1 }}
                       >
                         <span className="h-1.5 w-1.5 rounded-full bg-gradient-to-r from-[#F7931A] to-[#2F80ED]" />
-                        <span>
-                          {item}
-                        </span>
+                        <span>{item}</span>
                       </motion.li>
-                    )}
+                    ))}
                   </ul>
                 </div>
               </motion.div>
-            )}
+            ))}
           </div>
         </motion.div>
 
@@ -324,7 +334,7 @@ export default function About() {
 
       {/* Scroll to Top Button */}
       <AnimatePresence>
-        {isVisible &&
+        {isVisible && (
           <motion.button
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -343,8 +353,13 @@ export default function About() {
             >
               <path d="M5 10l7-7m0 0l7 7m-7-7v18" />
             </svg>
-          </motion.button>}
+          </motion.button>
+        )}
       </AnimatePresence>
+
+      <motion.footer variants={sectionVariants} className="relative z-10">
+        <Footer />
+      </motion.footer>
     </div>
   );
 }

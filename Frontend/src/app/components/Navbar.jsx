@@ -72,10 +72,16 @@ function Navbar() {
 
   const renderMenuItem = (item) => {
     if (item === "CONNECT WALLET") {
-      return <Button key={item} text={item} onClick={handleWalletConnect} className="bg-[#F7931A] hover:bg-[#F7931A]/80 text-white px-4 py-2 rounded-md text-sm transition-colors duration-300"
-/>;
+      return (
+        <Button
+          key={item}
+          text={item}
+          onClick={handleWalletConnect}
+          className="bg-[#F7931A] hover:bg-[#F7931A]/80 text-white px-4 py-2 rounded-md text-sm transition-colors duration-300"
+        />
+      );
     }
-    return <Button key={item} text={item} className="font-['Quantify']"/>;
+    return <Button key={item} text={item} className="font-['Quantify']" />;
   };
 
   // Get wallet display text
@@ -104,8 +110,6 @@ function Navbar() {
 
       <div className="hidden lg:flex gap-8 items-center">
         {menuItems.map((item) => renderMenuItem(item))}
-
-  
 
         {/* Privy Login Button */}
         <button
@@ -165,9 +169,9 @@ function Navbar() {
               ))}
 
               {/* Mobile Connect Button */}
-              <motion.div variants={itemVariants} className="w-full px-8">
+              {/* <motion.div variants={itemVariants} className="w-full px-8">
                 <ConnectButton />
-              </motion.div>
+              </motion.div> */}
 
               {/* Mobile Privy Login Button */}
               <motion.div variants={itemVariants} className="w-full px-8">

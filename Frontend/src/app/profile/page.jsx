@@ -17,7 +17,7 @@ import { toast } from "react-hot-toast";
 import { useAccount } from "wagmi";
 import { useDataContext } from "@/context/DataContext";
 import { ethers } from "ethers";
-
+import Footer from "../components/Footer";
 // Import token minting modal
 import TokenMintModal from "../components/TokenMintModal";
 
@@ -135,6 +135,17 @@ const Profile = () => {
       status: "Pending",
     },
   ];
+  const sectionVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: {
+      opacity: 1,
+      y: 0,
+      transition: {
+        duration: 0.8,
+        ease: "easeOut",
+      },
+    },
+  };
 
   return (
     <div className="min-h-screen bg-[#0D1117] text-white font-['Quantify']">
@@ -448,6 +459,9 @@ const Profile = () => {
           <TokenMintModal onClose={() => setShowMintModal(false)} />
         )}
       </AnimatePresence>
+      <motion.footer variants={sectionVariants} className="relative z-10">
+        <Footer />
+      </motion.footer>
     </div>
   );
 };

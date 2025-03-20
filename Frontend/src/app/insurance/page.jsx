@@ -9,7 +9,7 @@ import Navbar from "../components/Navbar";
 import SqueezeButton from "../components/SqueezeButton";
 import TimeLoader from "../components/TimeLoader";
 import ClaimModal from "../components/ClaimModal";
-
+import Footer from "../components/Footer";
 export default function Insurance() {
   const [showInsuranceModal, setShowInsuranceModal] = useState(false);
   const [showClaimModal, setShowClaimModal] = useState(false);
@@ -98,7 +98,17 @@ export default function Insurance() {
     setSelectedPolicy(policy);
     setShowClaimModal(true);
   };
-
+  const sectionVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: {
+      opacity: 1,
+      y: 0,
+      transition: {
+        duration: 0.8,
+        ease: "easeOut",
+      },
+    },
+  };
   if (isInitialLoading) {
     return (
       <div className="relative z-10 font-['Quantify'] tracking-[1px] bg-[#0D1117] min-h-screen flex flex-col">
@@ -271,6 +281,9 @@ export default function Insurance() {
           </AnimatePresence>
         </div>
       </div>
+      <motion.footer variants={sectionVariants} className="relative z-10">
+        <Footer />
+      </motion.footer>
     </div>
   );
 }

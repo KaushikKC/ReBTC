@@ -11,7 +11,7 @@ import { usePrivy } from "@privy-io/react-auth";
 import { useAccount, useBalance } from "wagmi";
 import { toast } from "react-hot-toast";
 import { useDataContext } from "@/context/DataContext";
-
+import Footer from "../components/Footer";
 // Import contract constants
 import {
   FLASH_LOAN_CONTRACT_ADDRESS,
@@ -189,6 +189,17 @@ const FlashLoan = () => {
       </div>
     );
   }
+  const sectionVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: {
+      opacity: 1,
+      y: 0,
+      transition: {
+        duration: 0.8,
+        ease: "easeOut",
+      },
+    },
+  };
 
   return (
     <div className="relative z-10 font-['Quantify'] tracking-[1px] bg-[#0D1117] min-h-screen flex flex-col">
@@ -462,6 +473,9 @@ const FlashLoan = () => {
           </motion.div>
         </AnimatePresence>
       </div>
+      <motion.footer variants={sectionVariants} className="relative z-10">
+        <Footer />
+      </motion.footer>
     </div>
   );
 };
