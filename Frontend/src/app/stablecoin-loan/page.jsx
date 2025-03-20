@@ -38,8 +38,11 @@ const StablecoinLoan = () => {
   const [isLoadingLoans, setIsLoadingLoans] = useState(true);
   const [hasCollateral, setHasCollateral] = useState(false);
   const [currentCollateral, setCurrentCollateral] = useState(0);
+  const [contractLtvRatio, setContractLtvRatio] = useState(70); // Default LTV ratio from contract (70%)
+  const [originationFee, setOriginationFee] = useState(0.5); // Default origination fee (0.5%)
+  const [interestRate, setInterestRate] = useState(2.5); // Default interest rate (2.5%)
 
-  const MAX_LTV = 75; // Maximum LTV allowed by the contract
+  const MAX_LTV = 70; // Maximum LTV allowed by the contract (70%)
 
   const { address, isConnected } = useAccount();
   const { ready, authenticated } = usePrivy();
@@ -62,17 +65,16 @@ const StablecoinLoan = () => {
 
     // Apply 2:1 ratio for lstBTC to USDT/USDC
     // 2 lstBTC = 1 USDT/USDC in value
-    const collateralValue = collateralAmount / 2;
+    const collateralValue = (parseFloat(collateralAmount) * btcPrice) / 2;
 
-    return collateralValue;
-  };
+    // Apply LTV percentage
+    const loanAmount = (collateralValue * ltvPercentage) / 100;
 
-  // Calculate interest rate based on LTV
-  const calculateInterestRate = () => {
-    const ltv = ltvPercentage;
-    if (ltv <= 50) return 2;
-    if (ltv <= 65) return 2.5;
-    return 3;
+    // Subtract origination fee
+    const fee = (loanAmount * originationFee) / 100;
+    const amountAfterFee = loanAmount - fee;
+
+    return amountAfterFee;
   };
 
   // Set due date (30 days from now)
@@ -83,18 +85,18 @@ const StablecoinLoan = () => {
     setDueDate(calculatedDueDate);
   }, []);
 
-  // Fetch BTC price and user loans when component mounts or address changes
+  // Fetch contract data when component mounts or address changes
   useEffect(() => {
     if (address && isConnected) {
-      fetchBtcPrice();
+      fetchContractData();
       fetchUserLoanPosition();
     } else {
       setIsLoadingLoans(false);
     }
   }, [address, isConnected]);
 
-  // Fetch BTC price from contract or oracle
-  const fetchBtcPrice = async () => {
+  // Fetch contract data (BTC price, LTV ratio, fees, etc.)
+  const fetchContractData = async () => {
     try {
       const lendingContract = await getContractInstance(
         LENDING_CONTRACT_ADDRESS,
@@ -102,7 +104,7 @@ const StablecoinLoan = () => {
       );
 
       if (lendingContract) {
-        // Try to get BTC price from contract
+        // Fetch BTC price
         try {
           const price = await lendingContract.getBtcPrice();
           setBtcPrice(parseFloat(ethers.utils.formatUnits(price, 8)));
@@ -111,11 +113,37 @@ const StablecoinLoan = () => {
             "Could not fetch BTC price from contract, using default",
             error
           );
-          // Keep using default price
+        }
+
+        // Try to fetch LTV ratio if available
+        try {
+          // This assumes there's a function to get the LTV ratio
+          // If not available, we'll use the default value
+          const ltvRatio = await lendingContract.LTV_RATIO();
+          setContractLtvRatio(ltvRatio.toNumber() / 100); // Convert from basis points (e.g., 7000) to percentage (70)
+          setLtvPercentage(ltvRatio.toNumber() / 200); // Set default slider to half of max
+        } catch (error) {
+          console.warn("Could not fetch LTV ratio, using default", error);
+        }
+
+        // Try to fetch origination fee if available
+        try {
+          const fee = await lendingContract.ORIGINATION_FEE();
+          setOriginationFee(fee.toNumber() / 100); // Convert from basis points to percentage
+        } catch (error) {
+          console.warn("Could not fetch origination fee, using default", error);
+        }
+
+        // Try to fetch interest rate if available
+        try {
+          const rate = await lendingContract.getInterestRate();
+          setInterestRate(rate.toNumber() / 100); // Convert from basis points to percentage
+        } catch (error) {
+          console.warn("Could not fetch interest rate, using default", error);
         }
       }
     } catch (error) {
-      console.error("Error initializing lending contract:", error);
+      console.error("Error fetching contract data:", error);
     }
   };
 
@@ -147,6 +175,17 @@ const StablecoinLoan = () => {
           // Get total debt
           const totalDebt = await lendingContract.getTotalDebt(address);
 
+          // Get collateral value
+          const collateralValue = await lendingContract.getCollateralValue(
+            position.collateralAmount
+          );
+
+          // Calculate current LTV
+          const currentLtv =
+            totalDebt.gt(0) && collateralValue.gt(0)
+              ? totalDebt.mul(10000).div(collateralValue).toNumber() / 100
+              : 0;
+
           // Check if user has USDC debt
           const usdcDebt = position.borrowedUSDC;
           const hasUsdcDebt = usdcDebt.gt(0);
@@ -154,6 +193,27 @@ const StablecoinLoan = () => {
           // Check if user has USDT debt
           const usdtDebt = position.borrowedUSDT;
           const hasUsdtDebt = usdtDebt.gt(0);
+
+          // Try to get accumulated interest
+          let accumulatedInterest = 0;
+          try {
+            if (position.lastInterestCalcTimestamp) {
+              // Calculate time elapsed since last interest calculation
+              const timeElapsed =
+                Math.floor(Date.now() / 1000) -
+                position.lastInterestCalcTimestamp.toNumber();
+
+              // Calculate accumulated interest (simplified)
+              accumulatedInterest = parseFloat(
+                ethers.utils.formatUnits(
+                  position.accumulatedInterest || ethers.BigNumber.from(0),
+                  6
+                )
+              );
+            }
+          } catch (error) {
+            console.warn("Could not calculate accumulated interest", error);
+          }
 
           const loans = [];
 
@@ -164,10 +224,12 @@ const StablecoinLoan = () => {
               collateral: collateralAmount,
               borrowed: parseFloat(ethers.utils.formatUnits(usdcDebt, 6)), // USDC uses 6 decimals
               currency: "USDC",
-              interest: 2.5, // This should be fetched from contract if available
+              interest: interestRate, // Use the fetched interest rate
               dueDate: "Ongoing", // Loans don't have fixed due dates in this contract
               status: "active",
               type: "usdc",
+              ltv: currentLtv,
+              accumulatedInterest: accumulatedInterest,
             };
 
             loans.push(formattedLoan);
@@ -180,10 +242,12 @@ const StablecoinLoan = () => {
               collateral: collateralAmount,
               borrowed: parseFloat(ethers.utils.formatUnits(usdtDebt, 6)), // USDT uses 6 decimals
               currency: "USDT",
-              interest: 2.5, // This should be fetched from contract if available
+              interest: interestRate, // Use the fetched interest rate
               dueDate: "Ongoing", // Loans don't have fixed due dates in this contract
               status: "active",
               type: "usdt",
+              ltv: currentLtv,
+              accumulatedInterest: accumulatedInterest,
             };
 
             loans.push(formattedLoan);
@@ -241,7 +305,7 @@ const StablecoinLoan = () => {
       // Calculate loan amount in wei
       const loanAmountInWei = ethers.utils.parseUnits(
         calculateLoanAmount().toString(),
-        18 // USDC and USDT both use 6 decimals
+        6 // USDC and USDT both use 6 decimals
       );
 
       // Step 1: Approve lstBTC transfer for collateral
@@ -446,7 +510,18 @@ const StablecoinLoan = () => {
                   <div>
                     <p className="text-gray-400">Interest Rate</p>
                     <p className="text-xl font-bold text-white">
-                      {calculateInterestRate()}% APR
+                      {interestRate}% APR
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-gray-400">Origination Fee</p>
+                    <p className="text-xl font-bold text-white">
+                      {originationFee}% (
+                      {(
+                        (calculateLoanAmount() * originationFee) /
+                        (100 - originationFee)
+                      ).toFixed(2)}{" "}
+                      {selectedStablecoin})
                     </p>
                   </div>
                   <div>
@@ -537,7 +612,8 @@ const StablecoinLoan = () => {
                     <th className="pb-4">Loan ID</th>
                     <th className="pb-4">lstBTC Collateral</th>
                     <th className="pb-4">Borrowed Amount</th>
-                    <th className="pb-4">Interest Rate</th>
+                    <th className="pb-4">Current LTV</th>
+                    <th className="pb-4">Interest</th>
                     <th className="pb-4">Status</th>
                     <th className="pb-4">Action</th>
                   </tr>
@@ -553,12 +629,11 @@ const StablecoinLoan = () => {
                         {loan.borrowed.toLocaleString()} {loan.currency}
                       </td>
                       <td className="py-4 text-white">
-                        {loan.interest}% (
-                        {(
-                          (loan.borrowed * loan.interest) /
-                          100
-                        ).toLocaleString()}{" "}
-                        {loan.currency})
+                        {loan.ltv.toFixed(2)}%
+                      </td>
+                      <td className="py-4 text-white">
+                        {loan.interest}% + {loan.accumulatedInterest.toFixed(2)}{" "}
+                        {loan.currency}
                       </td>
                       <td className="py-4">
                         <span

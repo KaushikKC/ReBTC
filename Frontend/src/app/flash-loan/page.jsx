@@ -20,6 +20,12 @@ import {
   TOKEN_ABI,
 } from "../../constants/contracts";
 
+// Local storage keys
+const TRANSACTION_HISTORY_KEY = "flashLoanTransactionHistory";
+const TRANSACTION_HISTORY_TIMESTAMP_KEY =
+  "flashLoanTransactionHistoryTimestamp";
+const CACHE_EXPIRATION_TIME = 30 * 60 * 1000; // 30 minutes in milliseconds
+
 const FlashLoan = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [lstBTCAmount, setLstBTCAmount] = useState("");
@@ -28,9 +34,15 @@ const FlashLoan = () => {
   const [isTransacting, setIsTransacting] = useState(false);
   const [transactionHash, setTransactionHash] = useState("");
 
+  // Contract state variables
+  const [availableLiquidity, setAvailableLiquidity] = useState(0);
+  const [feePercentage, setFeePercentage] = useState(30); // Default 30%
+  const [recentTransactions, setRecentTransactions] = useState([]);
+  const [conversionRate, setConversionRate] = useState(1.3); // Default value: 1.3 lstBTC = 1 stablecoin
+
   const { authenticated, user: privyUser } = usePrivy();
   const { address } = useAccount();
-  const { getContractInstance } = useDataContext();
+  const { getContractInstance, provider } = useDataContext();
 
   // Get lstBTC balance
   const { data: lstBtcBalanceData } = useBalance({
@@ -43,49 +55,211 @@ const FlashLoan = () => {
     ? parseFloat(ethers.utils.formatUnits(lstBtcBalanceData.value, 18))
     : 0;
 
-  const conversionRate = 65000;
-  const poolMetrics = {
-    availableLiquidity: 1000000,
-    utilizationRate: 75,
-  };
-
-  // Add loading effect
+  // Load transaction history from localStorage on component mount
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setIsLoading(false);
-    }, 2000);
+    const loadCachedTransactionHistory = () => {
+      try {
+        // Check if we're in a browser environment
+        if (typeof window !== "undefined") {
+          const cachedTimestampStr = localStorage.getItem(
+            TRANSACTION_HISTORY_TIMESTAMP_KEY
+          );
+          const cachedTransactionsStr = localStorage.getItem(
+            TRANSACTION_HISTORY_KEY
+          );
 
-    return () => clearTimeout(timer);
+          if (cachedTimestampStr && cachedTransactionsStr) {
+            const cachedTimestamp = parseInt(cachedTimestampStr);
+            const now = Date.now();
+
+            // Check if cache is still valid
+            if (now - cachedTimestamp < CACHE_EXPIRATION_TIME) {
+              const cachedTransactions = JSON.parse(cachedTransactionsStr);
+              setRecentTransactions(cachedTransactions);
+              console.log("Loaded transaction history from cache");
+              return true;
+            } else {
+              console.log("Cache expired, fetching fresh data");
+            }
+          }
+        }
+        return false;
+      } catch (error) {
+        console.error("Error loading cached transaction history:", error);
+        return false;
+      }
+    };
+
+    // Try to load from cache first, but don't set isLoading to false yet
+    loadCachedTransactionHistory();
   }, []);
 
-  // Example transaction data
-  const [recentTransactions, setRecentTransactions] = useState([
-    {
-      txHash: "0x1234...5678",
-      borrower: "0xA12...B34",
-      lstBTCUsed: 10,
-      stablecoinsReceived: 15000,
-      currency: "USDT",
-      status: "completed",
-      timestamp: "2024-02-15 14:30",
-    },
-    {
-      txHash: "0x5678...9ABC",
-      borrower: "0xB34...C56",
-      lstBTCUsed: 5,
-      stablecoinsReceived: 7500,
-      currency: "USDC",
-      status: "pending",
-      timestamp: "2024-02-15 14:28",
-    },
-  ]);
+  // Fetch contract data on component mount
+  useEffect(() => {
+    const fetchContractData = async () => {
+      try {
+        setIsLoading(true);
 
-  const calculateReceiveAmount = () => {
-    if (!lstBTCAmount) return 0;
-    return (parseFloat(lstBTCAmount) * conversionRate).toFixed(2);
+        const flashLoanContract = await getContractInstance(
+          FLASH_LOAN_CONTRACT_ADDRESS,
+          FLASH_LOAN_CONTRACT_ABI
+        );
+
+        if (flashLoanContract) {
+          // Fetch available liquidity for both stablecoins
+          const usdtLiquidityWei =
+            await flashLoanContract.getAvailableStablecoinLiquidity(true);
+          const usdcLiquidityWei =
+            await flashLoanContract.getAvailableStablecoinLiquidity(false);
+
+          console.log(usdtLiquidityWei, usdcLiquidityWei);
+
+          // Use the selected stablecoin's liquidity
+          const liquidityWei =
+            selectedStablecoin === "USDT" ? usdtLiquidityWei : usdcLiquidityWei;
+          const liquidity = parseFloat(
+            ethers.utils.formatUnits(liquidityWei, 18)
+          ); // Stablecoins use 6 decimals
+          setAvailableLiquidity(liquidity);
+
+          // Fetch fee percentage
+          try {
+            const feePercentageBps = await flashLoanContract.feePercentage();
+            setFeePercentage(feePercentageBps.toNumber() / 100); // Convert from basis points to percentage
+          } catch (error) {
+            console.warn(
+              "Could not fetch fee percentage, using default",
+              error
+            );
+          }
+
+          // Fetch recent transactions (Exchange events)
+          await fetchRecentTransactions(flashLoanContract);
+        }
+      } catch (error) {
+        console.error("Error fetching contract data:", error);
+        toast.error("Failed to load contract data. Please try again later.");
+      } finally {
+        // Add a slight delay for the loading animation
+        setTimeout(() => {
+          setIsLoading(false);
+        }, 1000);
+      }
+    };
+
+    fetchContractData();
+  }, [selectedStablecoin]);
+
+  // Save transaction history to localStorage whenever it changes
+  useEffect(() => {
+    if (recentTransactions.length > 0 && typeof window !== "undefined") {
+      try {
+        localStorage.setItem(
+          TRANSACTION_HISTORY_KEY,
+          JSON.stringify(recentTransactions)
+        );
+        localStorage.setItem(
+          TRANSACTION_HISTORY_TIMESTAMP_KEY,
+          Date.now().toString()
+        );
+        console.log("Saved transaction history to cache");
+      } catch (error) {
+        console.error("Error saving transaction history to cache:", error);
+      }
+    }
+  }, [recentTransactions]);
+
+  // Fetch recent transactions from contract events
+  const fetchRecentTransactions = async (contract) => {
+    try {
+      // Get the current block number
+      const currentBlock = await provider.getBlockNumber();
+
+      // Look back 10000 blocks (adjust as needed)
+      const fromBlock = Math.max(0, currentBlock - 10000);
+
+      // Get Exchange events
+      const exchangeFilter = contract.filters.Exchange();
+      const exchangeEvents = await contract.queryFilter(
+        exchangeFilter,
+        fromBlock
+      );
+
+      // Process events
+      const processedTransactions = await Promise.all(
+        exchangeEvents.map(async (event) => {
+          const block = await event.getBlock();
+          const timestamp = new Date(block.timestamp * 1000).toLocaleString();
+
+          // Determine stablecoin type from the address
+          const stablecoinAddress = event.args.stablecoinUsed.toLowerCase();
+          let stablecoinType = "Unknown";
+
+          try {
+            // Get USDT and USDC addresses from contract
+            const usdtAddress = (await contract.usdtToken()).toLowerCase();
+            const usdcAddress = (await contract.usdcToken()).toLowerCase();
+
+            if (stablecoinAddress === usdtAddress) {
+              stablecoinType = "USDT";
+            } else if (stablecoinAddress === usdcAddress) {
+              stablecoinType = "USDC";
+            }
+          } catch (error) {
+            console.warn("Could not determine stablecoin type", error);
+          }
+
+          return {
+            txHash: `${event.transactionHash.slice(
+              0,
+              6
+            )}...${event.transactionHash.slice(-4)}`,
+            borrower: `${event.args.user.slice(0, 6)}...${event.args.user.slice(
+              -4
+            )}`,
+            lstBTCUsed: parseFloat(
+              ethers.utils.formatUnits(event.args.lstBtcAmount, 18)
+            ),
+            stablecoinsReceived: parseFloat(
+              ethers.utils.formatUnits(event.args.stablecoinAmount, 6)
+            ),
+            currency: stablecoinType,
+            status: "completed",
+            timestamp: timestamp,
+            fullTxHash: event.transactionHash,
+          };
+        })
+      );
+
+      // Sort by timestamp (most recent first)
+      processedTransactions.sort((a, b) => {
+        return new Date(b.timestamp) - new Date(a.timestamp);
+      });
+
+      // Take the most recent 10 transactions
+      setRecentTransactions(processedTransactions.slice(0, 10));
+    } catch (error) {
+      console.error("Error fetching transaction events:", error);
+    }
   };
 
-  const executeFlashLoan = async () => {
+  // Calculate stablecoin amount based on lstBTC amount
+  // According to the contract: stablecoinAmount = lstBtcAmount * 10 / 13
+  const calculateReceiveAmount = () => {
+    if (!lstBTCAmount) return 0;
+    // This matches the contract calculation: lstBtcAmount * 10 / 13
+    return ((parseFloat(lstBTCAmount) * 10) / 13).toFixed(2);
+  };
+
+  // Calculate fee amount based on lstBTC amount
+  // According to the contract: feeAmount = lstBtcAmount * 3 / 13
+  const calculateFeeAmount = () => {
+    if (!lstBTCAmount) return 0;
+    // This matches the contract calculation: lstBtcAmount * 3 / 13
+    return ((parseFloat(lstBTCAmount) * 3) / 13).toFixed(6);
+  };
+
+  const executeExchange = async () => {
     if (!authenticated) {
       toast.error("Please connect your wallet first");
       return;
@@ -128,8 +302,8 @@ const FlashLoan = () => {
       await approveTx.wait();
       toast.dismiss();
 
-      // Step 2: Execute the flash loan
-      toast.loading("Executing flash loan...");
+      // Step 2: Execute the exchange
+      toast.loading(`Exchanging lstBTC for ${selectedStablecoin}...`);
 
       // Determine which stablecoin to use
       const useUsdt = selectedStablecoin === "USDT";
@@ -159,14 +333,21 @@ const FlashLoan = () => {
         currency: selectedStablecoin,
         status: "completed",
         timestamp: new Date().toLocaleString(),
+        fullTxHash: receipt.transactionHash,
       };
 
       setRecentTransactions([newTransaction, ...recentTransactions]);
 
+      // Refresh contract data
+      const liquidityWei =
+        await flashLoanContract.getAvailableStablecoinLiquidity(useUsdt);
+      const liquidity = parseFloat(ethers.utils.formatUnits(liquidityWei, 6));
+      setAvailableLiquidity(liquidity);
+
       // Reset form
       setLstBTCAmount("");
 
-      toast.success("Flash loan executed successfully!");
+      toast.success(`Successfully exchanged lstBTC for ${selectedStablecoin}!`);
     } catch (error) {
       console.error("Transaction error:", error);
       toast.dismiss();
@@ -182,9 +363,7 @@ const FlashLoan = () => {
         <Navbar />
         <div className="flex-grow flex flex-col items-center justify-center">
           <TimeLoader />
-          <p className="text-white mt-4 font-['Quantify']">
-            Loading Flash loans
-          </p>
+          <p className="text-white mt-4 font-['Quantify']">Loading Exchange</p>
         </div>
       </div>
     );
@@ -305,7 +484,7 @@ const FlashLoan = () => {
                     <div>
                       <p className="text-gray-400">Conversion Rate</p>
                       <p className="text-xl font-bold text-white">
-                        1 lstBTC = {conversionRate} {selectedStablecoin}
+                        1.3 lstBTC = 1 {selectedStablecoin}
                       </p>
                     </div>
                     <div>
@@ -314,14 +493,25 @@ const FlashLoan = () => {
                         {calculateReceiveAmount()} {selectedStablecoin}
                       </p>
                     </div>
+                    <div>
+                      <p className="text-gray-400">Fee (in lstBTC)</p>
+                      <p className="text-xl font-bold text-white">
+                        {calculateFeeAmount()} lstBTC
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-gray-400">Fee Percentage</p>
+                      <p className="text-xl font-bold text-white">
+                        {feePercentage}%
+                      </p>
+                    </div>
                   </div>
                 </div>
 
                 {/* Notice */}
                 <div className="p-4 rounded-lg text-sm text-gray-300">
-                  ⚠️ Flash loans must be borrowed and repaid within the same
-                  transaction. Failure to repay will result in transaction
-                  reversion.
+                  ⚠️ Your lstBTC will be deposited into the insurance pool.
+                  You'll receive stablecoins in exchange.
                 </div>
 
                 {/* Transaction Hash (if available) */}
@@ -358,7 +548,7 @@ const FlashLoan = () => {
                         ? "opacity-50 cursor-not-allowed"
                         : "hover:bg-[#F7931A]/90"
                     }`}
-                  onClick={executeFlashLoan}
+                  onClick={executeExchange}
                 >
                   {isTransacting ? (
                     <div className="flex items-center justify-center">
@@ -385,13 +575,13 @@ const FlashLoan = () => {
                       Processing...
                     </div>
                   ) : (
-                    "Execute Flash Loan"
+                    "Exchange lstBTC"
                   )}
                 </motion.button>
 
                 {!authenticated && (
                   <p className="text-center text-sm text-gray-400 mt-2">
-                    Please connect your wallet to execute a flash loan
+                    Please connect your wallet to exchange lstBTC
                   </p>
                 )}
               </motion.div>
@@ -404,15 +594,17 @@ const FlashLoan = () => {
                 className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8"
               >
                 <div className="bg-[#1C2128] p-6 rounded-xl shadow-lg">
-                  <h3 className="text-gray-300 mb-2">Available Liquidity</h3>
+                  <h3 className="text-gray-300 mb-2">
+                    Available {selectedStablecoin} Liquidity
+                  </h3>
                   <p className="text-2xl font-bold text-white">
-                    ${poolMetrics.availableLiquidity.toLocaleString()}
+                    ${availableLiquidity.toLocaleString()}
                   </p>
                 </div>
                 <div className="bg-[#1C2128] p-6 rounded-xl shadow-lg">
-                  <h3 className="text-gray-300 mb-2">Utilization Rate</h3>
+                  <h3 className="text-gray-300 mb-2">Exchange Rate</h3>
                   <p className="text-2xl font-bold text-white">
-                    {poolMetrics.utilizationRate}%
+                    1.3 lstBTC = 1 {selectedStablecoin}
                   </p>
                 </div>
               </motion.div>
@@ -425,49 +617,80 @@ const FlashLoan = () => {
                 transition={{ delay: 0.3 }}
                 className="bg-[#1C2128] rounded-xl p-6 shadow-lg overflow-x-auto"
               >
-                <h2 className="text-xl font-bold text-white mb-6">
-                  Recent Transactions
-                </h2>
-                <table className="w-full min-w-[800px]">
-                  <thead>
-                    <tr className="text-gray-400 text-left">
-                      <th className="pb-4">Tx Hash</th>
-                      <th className="pb-4">Borrower</th>
-                      <th className="pb-4">lstBTC Used</th>
-                      <th className="pb-4">Stablecoins Received</th>
-                      <th className="pb-4">Time</th>
-                      <th className="pb-4">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {recentTransactions.map((tx, index) => (
-                      <tr key={index} className="border-t border-[#2D333B]">
-                        <td className="py-4 text-blue-400">{tx.txHash}</td>
-                        <td className="py-4 text-gray-300">{tx.borrower}</td>
-                        <td className="py-4 text-white">
-                          {tx.lstBTCUsed} lstBTC
-                        </td>
-                        <td className="py-4 text-white">
-                          {tx.stablecoinsReceived.toLocaleString()}{" "}
-                          {tx.currency}
-                        </td>
-                        <td className="py-4 text-gray-300">{tx.timestamp}</td>
-                        <td className="py-4">
-                          <span
-                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                          ${
-                            tx.status === "completed"
-                              ? "bg-green-100 text-green-800"
-                              : "bg-yellow-100 text-yellow-800"
-                          }`}
-                          >
-                            {tx.status}
-                          </span>
-                        </td>
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-xl font-bold text-white">
+                    Recent Transactions
+                  </h2>
+                  <button
+                    onClick={async () => {
+                      setIsLoading(true);
+                      const flashLoanContract = await getContractInstance(
+                        FLASH_LOAN_CONTRACT_ADDRESS,
+                        FLASH_LOAN_CONTRACT_ABI
+                      );
+                      await fetchRecentTransactions(flashLoanContract);
+                      setIsLoading(false);
+                    }}
+                    className="px-3 py-1 bg-[#2D333B] hover:bg-[#373E47] text-gray-300 rounded-md text-sm transition-colors"
+                  >
+                    Refresh
+                  </button>
+                </div>
+                {recentTransactions.length === 0 ? (
+                  <div className="text-center py-8 text-gray-400">
+                    No transactions found
+                  </div>
+                ) : (
+                  <table className="w-full min-w-[800px]">
+                    <thead>
+                      <tr className="text-gray-400 text-left">
+                        <th className="pb-4">Tx Hash</th>
+                        <th className="pb-4">User</th>
+                        <th className="pb-4">lstBTC Used</th>
+                        <th className="pb-4">Stablecoins Received</th>
+                        <th className="pb-4">Time</th>
+                        <th className="pb-4">Status</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {recentTransactions.map((tx, index) => (
+                        <tr key={index} className="border-t border-[#2D333B]">
+                          <td className="py-4">
+                            <a
+                              href={`https://scan.test2.btcs.network/tx/${tx.fullTxHash}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-400 hover:underline"
+                            >
+                              {tx.txHash}
+                            </a>
+                          </td>
+                          <td className="py-4 text-gray-300">{tx.borrower}</td>
+                          <td className="py-4 text-white">
+                            {tx.lstBTCUsed.toFixed(6)} lstBTC
+                          </td>
+                          <td className="py-4 text-white">
+                            {tx.stablecoinsReceived.toLocaleString()}{" "}
+                            {tx.currency}
+                          </td>
+                          <td className="py-4 text-gray-300">{tx.timestamp}</td>
+                          <td className="py-4">
+                            <span
+                              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                            ${
+                              tx.status === "completed"
+                                ? "bg-green-100 text-green-800"
+                                : "bg-yellow-100 text-yellow-800"
+                            }`}
+                            >
+                              {tx.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
               </motion.div>
             </div>
           </motion.div>

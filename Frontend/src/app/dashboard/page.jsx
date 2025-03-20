@@ -233,7 +233,7 @@ function Dashboard() {
         >
           <p className="text-gray-400 mb-2">Total BTC Deposited</p>
           <p className="text-[44px] font-bold text-white tracking-wide">
-            $5.1M
+            $5000
           </p>
         </motion.div>
         <motion.div

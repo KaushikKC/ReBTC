@@ -323,7 +323,7 @@ const InsuranceModal = ({ onClose }) => {
           {/* Coverage Amount Input */}
           <div className="mb-6">
             <label className="block text-gray-300 text-sm mb-2">
-              Coverage Amount (BTC)
+              Coverage Amount (lstBTC)
             </label>
             <div className="relative">
               <input
@@ -346,13 +346,17 @@ const InsuranceModal = ({ onClose }) => {
             {/* Balance Display */}
             <div className="mt-2 flex justify-between text-sm">
               <span className="text-gray-400">Available Balance:</span>
-              <span className="text-white">{userBalance.toFixed(6)} BTC</span>
+              <span className="text-white">
+                {userBalance.toFixed(6)} lstBTC
+              </span>
             </div>
 
             {/* Max Coverage Display */}
             <div className="mt-1 flex justify-between text-sm">
               <span className="text-gray-400">Max Coverage:</span>
-              <span className="text-white">{maxCoverage.toFixed(6)} BTC</span>
+              <span className="text-white">
+                {maxCoverage.toFixed(6)} lstBTC
+              </span>
             </div>
           </div>
 
@@ -402,7 +406,7 @@ const InsuranceModal = ({ onClose }) => {
                 animate={{ opacity: 1 }}
                 className="text-red-400 text-sm mb-4"
               >
-                Coverage exceeds maximum allowed ({maxCoverage} BTC)
+                Coverage exceeds maximum allowed ({maxCoverage} lstBTC)
               </motion.div>
             )}
 

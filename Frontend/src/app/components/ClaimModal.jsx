@@ -45,7 +45,7 @@ const ClaimModal = ({ policy, onClose }) => {
       "Protocol hack",
       "Funds locked in contract",
     ],
-    "Slashing Protection": [
+    "General Coverage": [
       "Validator slashing due to network issues",
       "Slashing due to client bugs",
       "Unintentional double signing",
@@ -98,7 +98,7 @@ const ClaimModal = ({ policy, onClose }) => {
 
       // Call the claimInsurance function from the smart contract
       const tx = await insuranceContract.claimInsurance(
-        0, // Policy ID
+        policy.id, // Policy ID
         claimAmountInWei // Claim amount in wei
       );
 
@@ -152,7 +152,7 @@ const ClaimModal = ({ policy, onClose }) => {
     <>
       <div className="mb-6">
         <label className="block text-gray-300 text-sm mb-2">
-          Claim Amount (BTC)
+          Claim Amount (lstBTC)
         </label>
         <input
           type="number"
@@ -164,7 +164,7 @@ const ClaimModal = ({ policy, onClose }) => {
           disabled={isLoading}
         />
         <p className="text-sm text-gray-400 mt-2">
-          Maximum coverage: {policy.coverageAmount} BTC
+          Maximum coverage: {policy.coverageAmount} lstBTC
         </p>
       </div>
 
@@ -234,7 +234,7 @@ const ClaimModal = ({ policy, onClose }) => {
           </div>
           <div className="flex justify-between">
             <span className="text-gray-400">Claim Amount:</span>
-            <span className="text-white">{claimAmount} BTC</span>
+            <span className="text-white">{claimAmount} lstBTC</span>
           </div>
           <div className="flex justify-between">
             <span className="text-gray-400">Reason:</span>
@@ -257,7 +257,7 @@ const ClaimModal = ({ policy, onClose }) => {
         <motion.button
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
-          onClick={handleSubmitClaim}
+          onClick={() => handleSubmitClaim()}
           disabled={isLoading}
           className={`flex-1 ${
             isLoading

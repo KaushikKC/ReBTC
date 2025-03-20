@@ -10,7 +10,7 @@ export const LSTBTC_TOKEN_ADDRESS =
 export const LENDING_CONTRACT_ADDRESS =
   "0x0878fAF7697Ba41B88C1E76CF4BC19A589403C3a";
 export const INSURANCE_CONTRACT_ADDRESS =
-  "0x5A7Fd8e5EB1f1F9B0f7F4a83a2D0b5f5F5f5f5f5"; // Replace with actual insurance contract address
+  "0xC94f840066C6fa664CA96Dc8c8f499B77b7E57ad"; // Replace with actual insurance contract address
 export const FLASH_LOAN_CONTRACT_ADDRESS =
   "0x19079b097C72e5A2520Ee4fA8Ef1B9f9DDd75Fcf"; // Flash loan contract address
 
@@ -56,18 +56,32 @@ export const FAUCET_CONTRACT_ABI = [
 
 // Contract ABIs
 export const FLASH_LOAN_CONTRACT_ABI = [
+  // Token addresses
+  "function lstBtcToken() external view returns (address)",
+  "function usdtToken() external view returns (address)",
+  "function usdcToken() external view returns (address)",
+  "function insurancePool() external view returns (address)",
+
   // View functions
-  "function getFlashLoanFee() external view returns (uint256)",
-  "function getAvailableLiquidity() external view returns (uint256)",
-  "function getUtilizationRate() external view returns (uint256)",
+  "function feePercentage() external view returns (uint256)",
+  "function totalFeesCollected() external view returns (uint256)",
+  "function getAvailableStablecoinLiquidity(bool useUsdt) external view returns (uint256)",
 
   // State-changing functions
   "function exchangeLstBtcForStablecoin(uint256 lstBtcAmount, bool useUsdt) external",
-  "function flashLoan(address receiver, uint256 amount, bytes calldata params) external",
+  "function addStablecoinLiquidity(uint256 amount, bool useUsdt) external",
+
+  // Admin functions
+  "function withdrawStablecoin(uint256 amount, bool useUsdt) external",
+  "function updateInsurancePoolAddress(address _insurancePoolAddress) external",
+  "function updateFeePercentage(uint256 _feePercentage) external",
+  "function recoverToken(address tokenAddress, uint256 amount) external",
 
   // Events
-  "event FlashLoan(address indexed receiver, uint256 amount, uint256 fee)",
-  "event Exchange(address indexed user, uint256 lstBtcAmount, uint256 stablecoinAmount, bool isUsdt)",
+  "event Exchange(address indexed user, uint256 lstBtcAmount, uint256 stablecoinAmount, address stablecoinUsed)",
+  "event StablecoinLiquidityAdded(address indexed provider, uint256 amount, address stablecoinUsed)",
+  "event FeesWithdrawn(address indexed recipient, uint256 amount)",
+  "event InsurancePoolFunded(uint256 amount)",
 ];
 
 export const INSURANCE_CONTRACT_ABI = [
@@ -75,6 +89,7 @@ export const INSURANCE_CONTRACT_ABI = [
   "function policies(uint256 _policyId) external view returns (address policyholder, uint256 coverageAmount, uint256 premium, uint256 startTimestamp, uint256 expirationTimestamp, uint8 status, bool claimed, uint8 coverageType)",
   "function policyCount() external view returns (uint256)",
   "function poolBalance() external view returns (uint256)",
+  "function getTotalActiveCoverage() external view returns (uint256)",
   "function getPolicyStatus(uint256 _policyId) external view returns (uint8)",
   "function getUserPolicies(address _user) external view returns (uint256[])",
 
@@ -106,12 +121,15 @@ export const LENDING_CONTRACT_ABI = [
   "function depositCollateral(uint256 amount) external",
   "function borrow(bool isUSDT, uint256 amount) external",
   "function depositAndBorrow(uint256 collateralAmount, uint256 borrowAmount, bool isUSDT) external",
-  "function repayUSDC(uint256 amount) external",
-  "function repayUSDT(uint256 amount) external",
+  "function repay(bool isUSDT, uint256 amount) external",
   "function withdrawCollateral(uint256 amount) external",
 
   // Interest calculation
   "function updateInterest(address user) external",
+
+  "function LTV_RATIO() external view returns (uint256)",
+  "function ORIGINATION_FEE() external view returns (uint256)",
+  "function getInterestRate() external view returns (uint256)",
 
   // State-changing functions from original ABI
   "function createLoan(uint256 collateralAmount, uint256 loanAmount, address stablecoin, uint256 interestRateBps) external returns (uint256)",

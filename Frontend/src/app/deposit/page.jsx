@@ -18,7 +18,7 @@ import Footer from "../components/Footer";
 const DEPOSIT_CONTRACT_ABI = [
   "function depositBTC(uint256 amount) external",
   "function depositWETH(uint256 amount) external",
-  "function btcTotalValueLocked() external view returns (uint256)",
+  "function btcTotaslValueLocked() external view returns (uint256)",
   "function wethTotalValueLocked() external view returns (uint256)",
   "function userBtcDeposits(address user) external view returns (uint256 amount, uint256 depositTimestamp)",
   "function userWethDeposits(address user) external view returns (uint256 amount, uint256 depositTimestamp)",
@@ -450,17 +450,6 @@ function Deposit() {
       <motion.footer variants={sectionVariants} className="relative z-10">
         <Footer />
       </motion.footer>
-
-      {/* Page-wide Gradient Effects */}
-      {/* <motion.div
-        className="fixed inset-0 pointer-events-none"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 1.5 }}
-      >
-        <div className="absolute top-0 left-0 w-[500px] h-[500px] bg-[#2F80ED]/10 rounded-full filter blur-[100px] transform -translate-x-1/2 -translate-y-1/2" />
-        <div className="absolute bottom-0 right-0 w-[500px] h-[500px] bg-[#F7931A]/10 rounded-full filter blur-[100px] transform translate-x-1/2 translate-y-1/2" />
-      </motion.div> */}
     </div>
   );
 }
