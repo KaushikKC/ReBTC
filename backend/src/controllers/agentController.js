@@ -505,6 +505,7 @@ exports.setupMonitoringCron = () => {
 let cronJob = null;
 
 // Start the cron job with custom interval
+// Start the cron job with custom interval
 exports.startCronJob = (req, res) => {
   try {
     if (cronJob) {
@@ -515,9 +516,44 @@ exports.startCronJob = (req, res) => {
     }
 
     // Get interval from request or use default (every 6 hours)
-    // const { interval = "0 */6 * * *" } = req.body;
-    // 2min
     const { interval = "*/2 * * * *" } = req.body;
+
+    // Store the user preferences
+    const userPreferences = {
+      monitoringPeriod: req.body.monitoringPeriod || "1 month",
+      profitMargin: req.body.profitMargin || 1.0,
+      riskTolerance: req.body.riskTolerance || "medium",
+    };
+
+    // Run the analysis immediately to include in the response
+    const runInitialAnalysis = async () => {
+      try {
+        // Create a mock request with user preferences
+        const mockReq = {
+          body: userPreferences,
+        };
+
+        // Create a mock response to capture the analysis results
+        let analysisResults = null;
+        const mockRes = {
+          status: (code) => ({
+            json: (data) => {
+              if (code >= 200 && code < 300) {
+                analysisResults = data;
+              }
+            },
+          }),
+        };
+
+        await exports.monitorUsdtPrice(mockReq, mockRes);
+        return analysisResults;
+      } catch (error) {
+        console.error("Error in initial analysis:", error);
+        return null;
+      }
+    };
+
+    // Schedule the cron job
     cronJob = cron.schedule(interval, async () => {
       console.log(
         `Running USDT price monitoring job at ${new Date().toISOString()}...`
@@ -525,11 +561,7 @@ exports.startCronJob = (req, res) => {
       try {
         // Create a mock request with user preferences
         const mockReq = {
-          body: {
-            monitoringPeriod: req.body.monitoringPeriod || "1 month",
-            profitMargin: req.body.profitMargin || 1.0,
-            riskTolerance: req.body.riskTolerance || "medium",
-          },
+          body: userPreferences,
         };
 
         const mockRes = {
@@ -541,13 +573,14 @@ exports.startCronJob = (req, res) => {
               } else {
                 console.log("Cron job results:", JSON.stringify(data, null, 2));
 
-                // If the agent recommends depositing lstBTC, log it prominently
+                // If the agent recommends depositing lstBTC, initiate the multisig process
                 if (data.data?.usdt?.shouldDepositLstBtc) {
                   console.log(
                     "🚨 ALERT: Agent recommends depositing lstBTC as collateral! 🚨"
                   );
-                  // Here you would call your smart contract function to deposit lstBTC
-                  // depositLstBtc();
+
+                  // Here you would call your multisig contract function
+                  // initiateMultisigTransaction(userAddress, agentAddress, agentPrivateKey);
                 }
               }
             },
@@ -560,14 +593,17 @@ exports.startCronJob = (req, res) => {
       }
     });
 
-    return res.status(200).json({
-      success: true,
-      message: `USDT price monitoring cron job started with schedule: ${interval}`,
-      userPreferences: {
-        monitoringPeriod: req.body.monitoringPeriod || "1 month",
-        profitMargin: req.body.profitMargin || 1.0,
-        riskTolerance: req.body.riskTolerance || "medium",
-      },
+    // Run initial analysis and include in response
+    return runInitialAnalysis().then((initialAnalysis) => {
+      return res.status(200).json({
+        success: true,
+        message: `USDT price monitoring cron job started with schedule: ${interval}`,
+        userPreferences: userPreferences,
+        initialAnalysis: initialAnalysis ? initialAnalysis.data : null,
+        shouldDepositLstBtc:
+          initialAnalysis?.data?.usdt?.shouldDepositLstBtc || false,
+        fullAnalysis: initialAnalysis?.data?.usdt?.analysis?.fullAnalysis || "",
+      });
     });
   } catch (error) {
     console.error("Error starting cron job:", error);
