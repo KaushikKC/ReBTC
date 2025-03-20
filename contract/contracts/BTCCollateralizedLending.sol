@@ -448,9 +448,13 @@ contract BTCCollateralizedLending is Ownable, ReentrancyGuard {
     mapping(address => LoanPosition) public loanPositions;
 
     // Events
-    event CollateralDeposited(address indexed user, uint256 amount);
+    event CollateralDepositedAndBorrowed(
+        address indexed user,
+        uint256 collateralAmount,
+        address stablecoin,
+        uint256 borrowedAmount
+    );
     event CollateralWithdrawn(address indexed user, uint256 amount);
-    event LoanTaken(address indexed user, address stablecoin, uint256 amount);
     event LoanRepaid(address indexed user, address stablecoin, uint256 amount);
     event PositionLiquidated(
         address indexed user,
@@ -473,10 +477,14 @@ contract BTCCollateralizedLending is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @dev User deposits lstBTC as collateral
+     * @dev User deposits lstBTC as collateral and automatically receives stablecoin loan
      * @param amount Amount of lstBTC to deposit
+     * @param isUSDT True for USDT, false for USDC
      */
-    function depositCollateral(uint256 amount) external nonReentrant {
+    function depositCollateral(
+        uint256 amount,
+        bool isUSDT
+    ) external nonReentrant {
         require(amount > 0, "Amount must be greater than 0");
 
         // Transfer lstBTC from user to this contract
@@ -493,9 +501,62 @@ contract BTCCollateralizedLending is Ownable, ReentrancyGuard {
 
         // Update user's collateral
         LoanPosition storage position = loanPositions[msg.sender];
+
+        // If this is the first deposit, set the origination timestamp
+        if (position.collateralAmount == 0) {
+            position.originationTimestamp = block.timestamp;
+            position.lastInterestCalcTimestamp = block.timestamp;
+        } else {
+            // Update interest for existing position
+            updateInterest(msg.sender);
+        }
+
         position.collateralAmount = position.collateralAmount.add(amount);
 
-        emit CollateralDeposited(msg.sender, amount);
+        // Calculate borrowable amount based on LTV ratio
+        uint256 collateralValue = getCollateralValue(amount);
+        uint256 borrowableAmount = collateralValue.mul(LTV_RATIO).div(10000);
+
+        // Subtract origination fee from borrowable amount
+        uint256 fee = borrowableAmount.mul(ORIGINATION_FEE).div(10000);
+        uint256 amountToSend = borrowableAmount.sub(fee);
+        uint256 totalBorrow = borrowableAmount; // Including fee
+
+        // Check if borrow amount respects LTV ratio considering existing debt
+        uint256 totalDebt = getTotalDebt(msg.sender);
+        uint256 totalCollateralValue = getCollateralValue(
+            position.collateralAmount
+        );
+        require(
+            totalCollateralValue.mul(LTV_RATIO) >=
+                totalDebt.add(totalBorrow).mul(10000),
+            "Borrow would exceed LTV ratio"
+        );
+
+        // Update loan position and transfer stablecoin to user
+        if (isUSDT) {
+            position.borrowedUSDT = position.borrowedUSDT.add(totalBorrow);
+            require(
+                stablecoinUSDT.transfer(msg.sender, amountToSend),
+                "Transfer failed"
+            );
+        } else {
+            position.borrowedUSDC = position.borrowedUSDC.add(totalBorrow);
+            require(
+                stablecoinUSDC.transfer(msg.sender, amountToSend),
+                "Transfer failed"
+            );
+        }
+
+        // Update interest calculation timestamp
+        position.lastInterestCalcTimestamp = block.timestamp;
+
+        emit CollateralDepositedAndBorrowed(
+            msg.sender,
+            amount,
+            isUSDT ? address(stablecoinUSDT) : address(stablecoinUSDC),
+            amountToSend
+        );
     }
 
     /**
@@ -533,54 +594,6 @@ contract BTCCollateralizedLending is Ownable, ReentrancyGuard {
         require(lstBTCToken.transfer(msg.sender, amount), "Transfer failed");
 
         emit CollateralWithdrawn(msg.sender, amount);
-    }
-
-    /**
-     * @dev User borrows stablecoin against lstBTC collateral
-     * @param isUSDT True for USDT, false for USDC
-     * @param amount Amount of stablecoin to borrow
-     */
-    function borrow(bool isUSDT, uint256 amount) external nonReentrant {
-        require(amount > 0, "Amount must be greater than 0");
-
-        LoanPosition storage position = loanPositions[msg.sender];
-        require(position.collateralAmount > 0, "No collateral deposited");
-
-        // Calculate current debt
-        updateInterest(msg.sender);
-        uint256 totalDebt = getTotalDebt(msg.sender);
-
-        // Calculate new debt
-        uint256 fee = amount.mul(ORIGINATION_FEE).div(10000);
-        uint256 totalBorrow = amount.add(fee);
-        uint256 newTotalDebt = totalDebt.add(totalBorrow);
-
-        // Check if borrow amount respects LTV ratio
-        uint256 collateralValue = getCollateralValue(position.collateralAmount);
-        require(
-            collateralValue.mul(LTV_RATIO) >= newTotalDebt.mul(10000),
-            "Borrow would exceed LTV ratio"
-        );
-
-        // Update loan position
-        if (isUSDT) {
-            position.borrowedUSDT = position.borrowedUSDT.add(totalBorrow);
-            require(
-                stablecoinUSDT.transfer(msg.sender, amount),
-                "Transfer failed"
-            );
-            emit LoanTaken(msg.sender, address(stablecoinUSDT), amount);
-        } else {
-            position.borrowedUSDC = position.borrowedUSDC.add(totalBorrow);
-            require(
-                stablecoinUSDC.transfer(msg.sender, amount),
-                "Transfer failed"
-            );
-            emit LoanTaken(msg.sender, address(stablecoinUSDC), amount);
-        }
-
-        // Update interest calculation timestamp
-        position.lastInterestCalcTimestamp = block.timestamp;
     }
 
     /**
