@@ -1,9 +1,8 @@
 require("dotenv").config();
 const axios = require("axios");
-// const mongoose = require("mongoose");
+const mongoose = require("mongoose");
 
-// MongoDB Models - Commented out as requested
-/*
+// MongoDB Models
 const PriceSchema = new mongoose.Schema({
   id: String,
   price: Number,
@@ -12,7 +11,6 @@ const PriceSchema = new mongoose.Schema({
 });
 
 const USDTPrice = mongoose.model("USDTPrice", PriceSchema, "usdt_prices");
-*/
 
 // API Constants
 const API_URL = "https://hermes.pyth.network/v2/updates/price";
@@ -66,7 +64,7 @@ const fetchPriceData = async (timestamp) => {
   return [];
 };
 
-// Store data in MongoDB with proper validation - Commented out as requested
+// Store data in MongoDB with proper validation
 const storeDataInDB = async (data) => {
   for (const item of data) {
     try {
@@ -76,8 +74,6 @@ const storeDataInDB = async (data) => {
       console.log(`Received ID: ${normalizedItemId}`);
       console.log(`USDT ID to match: ${normalizedUsdtId}`);
 
-      // MongoDB storage is commented out as requested
-      /*
       if (normalizedItemId === normalizedUsdtId) {
         await USDTPrice.findOneAndUpdate(
           { publish_time: item.publish_time },
@@ -86,18 +82,6 @@ const storeDataInDB = async (data) => {
         );
         console.log(
           `Stored USDT data for time ${new Date(
-            item.publish_time * 1000
-          ).toISOString()}`
-        );
-      } else {
-        console.log(`Unknown coin ID: ${item.id}`);
-      }
-      */
-
-      // Instead of storing, just log the data
-      if (normalizedItemId === normalizedUsdtId) {
-        console.log(
-          `USDT data for time ${new Date(
             item.publish_time * 1000
           ).toISOString()}: Price: $${item.price.toFixed(4)}`
         );
@@ -113,13 +97,8 @@ const storeDataInDB = async (data) => {
 // Main Function for historical data
 const fetchHistoricalData = async () => {
   try {
-    // MongoDB connection commented out as requested
-    /*
-    await mongoose.connect(
-      "mongodb+srv://madhuvarsha:madhu1234@cluster0.jqjbs.mongodb.net/"
-    );
+    await mongoose.connect(process.env.MONGO_URI);
     console.log("Connected to MongoDB");
-    */
 
     const timestamps = generateTimestamps();
     console.log(`Generated ${timestamps.length} timestamps for fetching data`);
@@ -144,11 +123,8 @@ const fetchHistoricalData = async () => {
   } catch (error) {
     console.error("An error occurred:", error);
   } finally {
-    // MongoDB disconnection commented out as requested
-    /*
     await mongoose.disconnect();
     console.log("Disconnected from MongoDB");
-    */
   }
 };
 
