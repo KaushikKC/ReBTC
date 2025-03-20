@@ -6,7 +6,7 @@
 
 0xb8031099535532D4D5407616153F84f54DADa389 -> lendingProtocol.sol txHash -> https://scan.test2.btcs.network/tx/0xaabc66310ed04749a1b02a70ef0bd07e149ac1368ef7d1ac7b96af989792be3c
 
-0x922F892557e4CBa52d78dBaE8199cE4836A4cF94 -> DualTokenYieldVault.sol txHash -> https://scan.test2.btcs.network/tx/0x793f083ad91482218ecd4121240a17348434a7016b57283d36bfd82d4477ad55
+0x7d4829CC2a64517E52F538a2bDD83841Dcf8349b -> DualTokenYieldVault.sol txHash -> https://scan.test2.btcs.network/tx/0x793f083ad91482218ecd4121240a17348434a7016b57283d36bfd82d4477ad55
 
 0x0AC13581b7797E0c94d82966e6eF65654C193f5B -> USDT txHash -> https://scan.test2.btcs.network/tx/0x6fdb9b55e8ed0a076032c733e44fec204353590629ec9ef122d40c553398ed6b
 
@@ -24,5 +24,8 @@
 
 0x19079b097C72e5A2520Ee4fA8Ef1B9f9DDd75Fcf -> FlashLoan.sol(transfers the lstBTC to the insurancePool)
 
+0x6E3f2C97B4Ab1c45AA324fD69A8028EE8a6055Ae -> Faucet.sol 
+
 1,000,000,000,000,000,000,000
 18 decimals for LstBTC,USDT,USDC
+Backend needed for Flashloan(recent txs), Stablecoinloan(active loans), Insurance(active insurance and claim history), profile page

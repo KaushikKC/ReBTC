@@ -6,17 +6,47 @@ import Navbar from "../components/Navbar";
 import SqueezeButton from "../components/SqueezeButton";
 import { FaChevronDown } from "react-icons/fa";
 import TimeLoader from "../components/TimeLoader";
+import { ethers } from "ethers";
+import { usePrivy } from "@privy-io/react-auth";
+import { useAccount, useBalance } from "wagmi";
+import { toast } from "react-hot-toast";
+import { useDataContext } from "@/context/DataContext";
+
+// Import contract constants
+import {
+  FLASH_LOAN_CONTRACT_ADDRESS,
+  FLASH_LOAN_CONTRACT_ABI,
+  LSTBTC_TOKEN_ADDRESS,
+  TOKEN_ABI,
+} from "../../constants/contracts";
+
 const FlashLoan = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [lstBTCAmount, setLstBTCAmount] = useState("");
   const [selectedStablecoin, setSelectedStablecoin] = useState("USDT");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isTransacting, setIsTransacting] = useState(false);
+  const [transactionHash, setTransactionHash] = useState("");
 
-  const availableLstBTC = 15.5;
+  const { authenticated, user: privyUser } = usePrivy();
+  const { address } = useAccount();
+  const { getContractInstance } = useDataContext();
+
+  // Get lstBTC balance
+  const { data: lstBtcBalanceData } = useBalance({
+    address,
+    token: LSTBTC_TOKEN_ADDRESS,
+    watch: true,
+  });
+
+  const availableLstBTC = lstBtcBalanceData
+    ? parseFloat(ethers.utils.formatUnits(lstBtcBalanceData.value, 18))
+    : 0;
+
   const conversionRate = 65000;
   const poolMetrics = {
     availableLiquidity: 1000000,
-    utilizationRate: 75
+    utilizationRate: 75,
   };
 
   // Add loading effect
@@ -29,7 +59,7 @@ const FlashLoan = () => {
   }, []);
 
   // Example transaction data
-  const recentTransactions = [
+  const [recentTransactions, setRecentTransactions] = useState([
     {
       txHash: "0x1234...5678",
       borrower: "0xA12...B34",
@@ -37,7 +67,7 @@ const FlashLoan = () => {
       stablecoinsReceived: 15000,
       currency: "USDT",
       status: "completed",
-      timestamp: "2024-02-15 14:30"
+      timestamp: "2024-02-15 14:30",
     },
     {
       txHash: "0x5678...9ABC",
@@ -46,13 +76,104 @@ const FlashLoan = () => {
       stablecoinsReceived: 7500,
       currency: "USDC",
       status: "pending",
-      timestamp: "2024-02-15 14:28"
-    }
-  ];
+      timestamp: "2024-02-15 14:28",
+    },
+  ]);
 
   const calculateReceiveAmount = () => {
     if (!lstBTCAmount) return 0;
     return (parseFloat(lstBTCAmount) * conversionRate).toFixed(2);
+  };
+
+  const executeFlashLoan = async () => {
+    if (!authenticated) {
+      toast.error("Please connect your wallet first");
+      return;
+    }
+
+    if (!lstBTCAmount || parseFloat(lstBTCAmount) <= 0) {
+      toast.error("Please enter a valid amount");
+      return;
+    }
+
+    try {
+      setIsTransacting(true);
+
+      // Get contract instances
+      const flashLoanContract = await getContractInstance(
+        FLASH_LOAN_CONTRACT_ADDRESS,
+        FLASH_LOAN_CONTRACT_ABI
+      );
+
+      const lstBtcTokenContract = await getContractInstance(
+        LSTBTC_TOKEN_ADDRESS,
+        TOKEN_ABI
+      );
+
+      if (!flashLoanContract || !lstBtcTokenContract) {
+        throw new Error("Failed to initialize contracts");
+      }
+
+      // Convert lstBTC amount to wei (18 decimals)
+      const lstBTCAmountWei = ethers.utils.parseEther(lstBTCAmount);
+
+      // Step 1: Approve token transfer
+      toast.loading("Approving token transfer...");
+      const approveTx = await lstBtcTokenContract.approve(
+        FLASH_LOAN_CONTRACT_ADDRESS,
+        lstBTCAmountWei
+      );
+
+      // Wait for approval transaction to be mined
+      await approveTx.wait();
+      toast.dismiss();
+
+      // Step 2: Execute the flash loan
+      toast.loading("Executing flash loan...");
+
+      // Determine which stablecoin to use
+      const useUsdt = selectedStablecoin === "USDT";
+
+      // Execute the transaction
+      const tx = await flashLoanContract.exchangeLstBtcForStablecoin(
+        lstBTCAmountWei,
+        useUsdt
+      );
+
+      // Wait for transaction to be mined
+      const receipt = await tx.wait();
+      toast.dismiss();
+
+      // Update UI with transaction hash
+      setTransactionHash(receipt.transactionHash);
+
+      // Add transaction to recent transactions
+      const newTransaction = {
+        txHash: `${receipt.transactionHash.slice(
+          0,
+          6
+        )}...${receipt.transactionHash.slice(-4)}`,
+        borrower: `${address.slice(0, 6)}...${address.slice(-4)}`,
+        lstBTCUsed: parseFloat(lstBTCAmount),
+        stablecoinsReceived: parseFloat(calculateReceiveAmount()),
+        currency: selectedStablecoin,
+        status: "completed",
+        timestamp: new Date().toLocaleString(),
+      };
+
+      setRecentTransactions([newTransaction, ...recentTransactions]);
+
+      // Reset form
+      setLstBTCAmount("");
+
+      toast.success("Flash loan executed successfully!");
+    } catch (error) {
+      console.error("Transaction error:", error);
+      toast.dismiss();
+      toast.error(error.message || "Transaction failed. Please try again.");
+    } finally {
+      setIsTransacting(false);
+    }
   };
 
   if (isLoading) {
@@ -105,20 +226,24 @@ const FlashLoan = () => {
                     <input
                       type="number"
                       value={lstBTCAmount}
-                      onChange={e => setLstBTCAmount(e.target.value)}
+                      onChange={(e) => setLstBTCAmount(e.target.value)}
                       className="w-full bg-[#2D333B] text-white p-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2F80ED] transition-all"
                       placeholder="0.00"
                       max={availableLstBTC}
+                      disabled={isTransacting}
                     />
                     <button
-                      onClick={() => setLstBTCAmount(availableLstBTC)}
+                      onClick={() =>
+                        setLstBTCAmount(availableLstBTC.toString())
+                      }
                       className="absolute right-3 top-1/2 transform -translate-y-1/2 bg-[#2F80ED] text-white px-3 py-1 rounded-md text-sm hover:bg-[#2F80ED]/80 transition-colors"
+                      disabled={isTransacting}
                     >
                       MAX
                     </button>
                   </div>
                   <p className="text-sm text-gray-400 mt-2">
-                    Available: {availableLstBTC} lstBTC
+                    Available: {availableLstBTC.toFixed(6)} lstBTC
                   </p>
                 </div>
 
@@ -131,22 +256,21 @@ const FlashLoan = () => {
                     <button
                       onClick={() => setIsDropdownOpen(!isDropdownOpen)}
                       className="w-full flex items-center justify-between bg-[#2D333B] p-4 rounded-lg hover:bg-[#373E47] transition-colors"
+                      disabled={isTransacting}
                     >
-                      <span className="text-white">
-                        {selectedStablecoin}
-                      </span>
+                      <span className="text-white">{selectedStablecoin}</span>
                       <FaChevronDown className="text-gray-400" />
                     </button>
 
                     <AnimatePresence>
-                      {isDropdownOpen &&
+                      {isDropdownOpen && (
                         <motion.div
                           initial={{ opacity: 0, y: -10 }}
                           animate={{ opacity: 1, y: 0 }}
                           exit={{ opacity: 0, y: -10 }}
                           className="absolute w-full mt-2 bg-[#2D333B] rounded-lg shadow-xl z-10"
                         >
-                          {["USDT", "USDC"].map(coin =>
+                          {["USDT", "USDC"].map((coin) => (
                             <button
                               key={coin}
                               onClick={() => {
@@ -157,8 +281,9 @@ const FlashLoan = () => {
                             >
                               {coin}
                             </button>
-                          )}
-                        </motion.div>}
+                          ))}
+                        </motion.div>
+                      )}
                     </AnimatePresence>
                   </div>
                 </div>
@@ -182,24 +307,82 @@ const FlashLoan = () => {
                 </div>
 
                 {/* Notice */}
-                <div className=" p-4 rounded-lg  text-sm text-gray-300">
+                <div className="p-4 rounded-lg text-sm text-gray-300">
                   ⚠️ Flash loans must be borrowed and repaid within the same
                   transaction. Failure to repay will result in transaction
                   reversion.
                 </div>
 
+                {/* Transaction Hash (if available) */}
+                {transactionHash && (
+                  <div className="bg-[#2D333B] p-4 rounded-lg mb-6 mt-4">
+                    <p className="text-gray-400 mb-1">Transaction Hash:</p>
+                    <a
+                      href={`https://scan.test2.btcs.network/tx/${transactionHash}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-400 break-all hover:underline"
+                    >
+                      {transactionHash}
+                    </a>
+                  </div>
+                )}
+
                 {/* Execute Button */}
                 <motion.button
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
-                  disabled={!lstBTCAmount || lstBTCAmount <= 0}
+                  disabled={
+                    !lstBTCAmount ||
+                    lstBTCAmount <= 0 ||
+                    isTransacting ||
+                    !authenticated
+                  }
                   className={`w-full bg-[#F7931A] text-white py-4 rounded-lg font-medium transition-colors
-                ${!lstBTCAmount || lstBTCAmount <= 0
-                  ? "opacity-50 cursor-not-allowed"
-                  : "hover:bg-[#F7931A]/90"}`}
+                    ${
+                      !lstBTCAmount ||
+                      lstBTCAmount <= 0 ||
+                      isTransacting ||
+                      !authenticated
+                        ? "opacity-50 cursor-not-allowed"
+                        : "hover:bg-[#F7931A]/90"
+                    }`}
+                  onClick={executeFlashLoan}
                 >
-                  Execute Flash Loan
+                  {isTransacting ? (
+                    <div className="flex items-center justify-center">
+                      <svg
+                        className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                      >
+                        <circle
+                          className="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                        ></circle>
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                        ></path>
+                      </svg>
+                      Processing...
+                    </div>
+                  ) : (
+                    "Execute Flash Loan"
+                  )}
                 </motion.button>
+
+                {!authenticated && (
+                  <p className="text-center text-sm text-gray-400 mt-2">
+                    Please connect your wallet to execute a flash loan
+                  </p>
+                )}
               </motion.div>
 
               {/* Pool Metrics */}
@@ -224,8 +407,6 @@ const FlashLoan = () => {
               </motion.div>
             </div>
             <div className="w-full max-w-7xl px-4 md:px-8">
-              {/* Flash Loan Form */}
-
               {/* Recent Transactions Table */}
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
@@ -248,14 +429,10 @@ const FlashLoan = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {recentTransactions.map((tx, index) =>
+                    {recentTransactions.map((tx, index) => (
                       <tr key={index} className="border-t border-[#2D333B]">
-                        <td className="py-4 text-blue-400">
-                          {tx.txHash}
-                        </td>
-                        <td className="py-4 text-gray-300">
-                          {tx.borrower}
-                        </td>
+                        <td className="py-4 text-blue-400">{tx.txHash}</td>
+                        <td className="py-4 text-gray-300">{tx.borrower}</td>
                         <td className="py-4 text-white">
                           {tx.lstBTCUsed} lstBTC
                         </td>
@@ -263,21 +440,21 @@ const FlashLoan = () => {
                           {tx.stablecoinsReceived.toLocaleString()}{" "}
                           {tx.currency}
                         </td>
-                        <td className="py-4 text-gray-300">
-                          {tx.timestamp}
-                        </td>
+                        <td className="py-4 text-gray-300">{tx.timestamp}</td>
                         <td className="py-4">
                           <span
                             className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                          ${tx.status === "completed"
-                            ? "bg-green-100 text-green-800"
-                            : "bg-yellow-100 text-yellow-800"}`}
+                          ${
+                            tx.status === "completed"
+                              ? "bg-green-100 text-green-800"
+                              : "bg-yellow-100 text-yellow-800"
+                          }`}
                           >
                             {tx.status}
                           </span>
                         </td>
                       </tr>
-                    )}
+                    ))}
                   </tbody>
                 </table>
               </motion.div>

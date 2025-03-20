@@ -1,12 +1,25 @@
 "use client";
 
 import React, { useState } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { FaTimes, FaExclamationTriangle, FaFileAlt } from "react-icons/fa";
 import { toast } from "react-hot-toast";
 import { useAccount } from "wagmi";
 import { useDataContext } from "@/context/DataContext";
 import { ethers } from "ethers";
+import TimeLoader from "./TimeLoader";
+import { INSURANCE_POOL_ADDRESS } from "../../constants/contracts";
+// ABI for the insurance contract
+const INSURANCE_CONTRACT_ABI = [
+  "function claimInsurance(uint256 _policyId, uint256 _claimAmount) external",
+  "function policies(uint256 _policyId) external view returns (address policyholder, uint256 coverageAmount, uint256 premiumAmount, uint256 startTimestamp, uint256 expirationTimestamp, uint8 status, bool claimed)",
+];
+
+// Token ABI for lstBTC
+const LST_BTC_TOKEN_ABI = [
+  "function balanceOf(address account) external view returns (uint256)",
+  "function decimals() external view returns (uint8)",
+];
 
 const ClaimModal = ({ policy, onClose }) => {
   const [claimAmount, setClaimAmount] = useState("");
@@ -14,6 +27,9 @@ const ClaimModal = ({ policy, onClose }) => {
   const [evidenceUrl, setEvidenceUrl] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [step, setStep] = useState(1);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
+  const [processingStep, setProcessingStep] = useState("");
 
   const { address } = useAccount();
   const { getContractInstance } = useDataContext();
@@ -37,6 +53,11 @@ const ClaimModal = ({ policy, onClose }) => {
   };
 
   const handleSubmitClaim = async () => {
+    if (!address) {
+      toast.error("Please connect your wallet first");
+      return;
+    }
+
     if (!claimAmount || !claimReason) {
       toast.error("Please fill in all required fields");
       return;
@@ -54,20 +75,76 @@ const ClaimModal = ({ policy, onClose }) => {
 
     try {
       setIsLoading(true);
+      setIsProcessing(true);
+      setProcessingStep("Preparing your claim...");
 
-      // This would be replaced with actual contract interaction
-      // For now, we'll simulate a successful claim submission
+      // Get insurance contract instance
+      const insuranceContract = await getContractInstance(
+        INSURANCE_POOL_ADDRESS,
+        INSURANCE_CONTRACT_ABI
+      );
 
-      // Simulate API call delay
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      if (!insuranceContract) {
+        throw new Error("Failed to get contract instance");
+      }
 
-      toast.success("Claim submitted successfully");
-      onClose();
+      // Convert claim amount to the appropriate format (assuming BTC has 8 decimals)
+      const claimAmountInWei = ethers.utils.parseUnits(
+        claimAmount.toString(),
+        8
+      );
+
+      setProcessingStep("Submitting claim to the blockchain...");
+
+      // Call the claimInsurance function from the smart contract
+      const tx = await insuranceContract.claimInsurance(
+        0, // Policy ID
+        claimAmountInWei // Claim amount in wei
+      );
+
+      setProcessingStep("Waiting for transaction confirmation...");
+
+      // Wait for transaction to be mined
+      const receipt = await tx.wait();
+
+      // Update based on transaction status
+      if (receipt.status === 1) {
+        setIsSuccess(true);
+        setProcessingStep("Claim submitted successfully!");
+
+        // Show success toast
+        toast.success("Claim submitted successfully");
+
+        // Close modal after a delay
+        setTimeout(() => {
+          onClose();
+        }, 2000);
+      } else {
+        throw new Error("Transaction failed");
+      }
     } catch (error) {
       console.error("Error submitting claim:", error);
-      toast.error("Failed to submit claim. Please try again.");
+      setIsProcessing(false);
+
+      // Handle specific error messages
+      if (error.message.includes("Policy is not active")) {
+        toast.error("This policy is not active");
+      } else if (error.message.includes("Only the policyholder can claim")) {
+        toast.error("Only the policyholder can submit a claim");
+      } else if (error.message.includes("Policy has expired")) {
+        toast.error("This policy has expired");
+      } else if (error.message.includes("Policy has already been claimed")) {
+        toast.error("This policy has already been claimed");
+      } else if (error.message.includes("Amount exceeds coverage")) {
+        toast.error("Claim amount exceeds policy coverage");
+      } else if (error.message.includes("Insufficient funds in the pool")) {
+        toast.error("Insufficient funds in the insurance pool");
+      } else {
+        toast.error("Failed to submit claim. Please try again.");
+      }
     } finally {
       setIsLoading(false);
+      // Note: We don't reset isProcessing here if successful to keep showing the success state
     }
   };
 
@@ -182,7 +259,11 @@ const ClaimModal = ({ policy, onClose }) => {
           whileTap={{ scale: 0.98 }}
           onClick={handleSubmitClaim}
           disabled={isLoading}
-          className="flex-1 bg-[#F7931A] text-white py-3 rounded-lg font-medium hover:bg-[#F7931A]/90 transition-colors"
+          className={`flex-1 ${
+            isLoading
+              ? "bg-gray-500 cursor-not-allowed"
+              : "bg-[#F7931A] hover:bg-[#F7931A]/90 cursor-pointer"
+          } text-white py-3 rounded-lg font-medium transition-colors`}
         >
           {isLoading ? "Processing..." : "Submit Claim"}
         </motion.button>
@@ -212,7 +293,7 @@ const ClaimModal = ({ policy, onClose }) => {
         animate={{ scale: 1 }}
         exit={{ scale: 0.95 }}
         onClick={(e) => e.stopPropagation()}
-        className="bg-[#1C2128] rounded-xl p-6 w-full max-w-md"
+        className="bg-[#1C2128] rounded-xl p-6 w-full max-w-md relative"
       >
         {/* Header */}
         <div className="flex justify-between items-center mb-6">
@@ -269,6 +350,40 @@ const ClaimModal = ({ policy, onClose }) => {
 
         {/* Form Steps */}
         {step === 1 ? renderStepOne() : renderStepTwo()}
+
+        {/* Processing Overlay */}
+        <AnimatePresence>
+          {isProcessing && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-[#1C2128]/90 backdrop-blur-sm rounded-xl flex flex-col items-center justify-center gap-4"
+            >
+              {!isSuccess ? (
+                <>
+                  <TimeLoader />
+                  <motion.p
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="text-white font-medium"
+                  >
+                    {processingStep}
+                  </motion.p>
+                </>
+              ) : (
+                <motion.div
+                  initial={{ scale: 0.5, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  className="flex flex-col items-center gap-4"
+                >
+                  <div className="text-[#4CAF50] text-5xl">✓</div>
+                  <p className="text-white font-medium">{processingStep}</p>
+                </motion.div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </motion.div>
     </motion.div>
   );

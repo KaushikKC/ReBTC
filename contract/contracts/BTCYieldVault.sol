@@ -17,11 +17,11 @@ interface ILendingProtocol {
 }
 
 /**
- * @title lstBTC Token
+ * @title ReBTC Token
  * @dev ERC20 token representing a share in the yield vault for BTC
  */
-contract LstBTC is ERC20, Ownable {
-    constructor() ERC20("Liquid Staked BTC", "lstBTC") Ownable(msg.sender) {}
+contract ReBTC is ERC20, Ownable {
+    constructor() ERC20("Rebased Bitcoin", "ReBTC") Ownable(msg.sender) {}
 
     function mint(address to, uint256 amount) external onlyOwner {
         _mint(to, amount);
@@ -33,11 +33,11 @@ contract LstBTC is ERC20, Ownable {
 }
 
 /**
- * @title lstWETH Token
+ * @title ReWETH Token
  * @dev ERC20 token representing a share in the yield vault for WETH
  */
-contract LstWETH is ERC20, Ownable {
-    constructor() ERC20("Liquid Staked WETH", "lstWETH") Ownable(msg.sender) {}
+contract ReWETH is ERC20, Ownable {
+    constructor() ERC20("Rebased WETH", "ReWETH") Ownable(msg.sender) {}
 
     function mint(address to, uint256 amount) external onlyOwner {
         _mint(to, amount);
@@ -57,14 +57,14 @@ contract DualTokenYieldVault is Ownable, ReentrancyGuard {
 
     // BTC related variables
     IERC20 public btcToken;
-    LstBTC public lstBTCToken;
+    ReBTC public reBTCToken;
     uint8 public btcDecimals;
     uint256 public btcTotalDeposited;
     uint256 public btcTotalValueLocked;
 
     // WETH related variables
     IERC20 public wethToken;
-    LstWETH public lstWETHToken;
+    ReWETH public reWETHToken;
     uint8 public wethDecimals;
     uint256 public wethTotalDeposited;
     uint256 public wethTotalValueLocked;
@@ -73,7 +73,7 @@ contract DualTokenYieldVault is Ownable, ReentrancyGuard {
 
     uint256 public constant YEAR_IN_SECONDS = 365 days;
     uint256 public lockPeriod = YEAR_IN_SECONDS; // 1 year lock period
-    uint8 public constant LST_DECIMALS = 18; // ERC20 default
+    uint8 public constant RE_DECIMALS = 18; // ERC20 default
 
     // User deposit info
     struct UserDeposit {
@@ -85,27 +85,23 @@ contract DualTokenYieldVault is Ownable, ReentrancyGuard {
     mapping(address => UserDeposit) public userWethDeposits;
 
     // Events
-    event DepositBTC(
-        address indexed user,
-        uint256 amount,
-        uint256 lstBTCAmount
-    );
+    event DepositBTC(address indexed user, uint256 amount, uint256 reBTCAmount);
     event WithdrawBTC(
         address indexed user,
         uint256 amount,
-        uint256 lstBTCAmount
+        uint256 reBTCAmount
     );
     event YieldHarvestedBTC(uint256 yieldAmount);
 
     event DepositWETH(
         address indexed user,
         uint256 amount,
-        uint256 lstWETHAmount
+        uint256 reWETHAmount
     );
     event WithdrawWETH(
         address indexed user,
         uint256 amount,
-        uint256 lstWETHAmount
+        uint256 reWETHAmount
     );
     event YieldHarvestedWETH(uint256 yieldAmount);
 
@@ -118,9 +114,9 @@ contract DualTokenYieldVault is Ownable, ReentrancyGuard {
         wethToken = IERC20(_wethToken);
         lendingProtocol = ILendingProtocol(_lendingProtocol);
 
-        // Create LST tokens
-        lstBTCToken = new LstBTC();
-        lstWETHToken = new LstWETH();
+        // Create rebased tokens
+        reBTCToken = new ReBTC();
+        reWETHToken = new ReWETH();
 
         // Get BTC token decimals
         try ERC20(_btcToken).decimals() returns (uint8 _decimals) {
@@ -140,7 +136,7 @@ contract DualTokenYieldVault is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @dev User deposits BTC and receives lstBTC
+     * @dev User deposits BTC and receives ReBTC
      * @param amount Amount of BTC to deposit
      */
     function depositBTC(uint256 amount) external nonReentrant {
@@ -158,21 +154,21 @@ contract DualTokenYieldVault is Ownable, ReentrancyGuard {
         // Deposit into lending protocol
         lendingProtocol.deposit(address(btcToken), amount);
 
-        // Calculate lstBTC amount to mint with decimal adjustment
-        uint256 lstBTCToMint;
-        if (LST_DECIMALS > btcDecimals) {
-            // If lstBTC has more decimals than BTC, multiply
-            lstBTCToMint = amount.mul(10 ** (LST_DECIMALS - btcDecimals));
-        } else if (LST_DECIMALS < btcDecimals) {
-            // If lstBTC has fewer decimals than BTC, divide
-            lstBTCToMint = amount.div(10 ** (btcDecimals - LST_DECIMALS));
+        // Calculate ReBTC amount to mint with decimal adjustment
+        uint256 reBTCToMint;
+        if (RE_DECIMALS > btcDecimals) {
+            // If ReBTC has more decimals than BTC, multiply
+            reBTCToMint = amount.mul(10 ** (RE_DECIMALS - btcDecimals));
+        } else if (RE_DECIMALS < btcDecimals) {
+            // If ReBTC has fewer decimals than BTC, divide
+            reBTCToMint = amount.div(10 ** (btcDecimals - RE_DECIMALS));
         } else {
             // If same number of decimals, 1:1 ratio
-            lstBTCToMint = amount;
+            reBTCToMint = amount;
         }
 
-        // Mint lstBTC to user
-        lstBTCToken.mint(msg.sender, lstBTCToMint);
+        // Mint ReBTC to user
+        reBTCToken.mint(msg.sender, reBTCToMint);
 
         // Update user deposit info
         userBtcDeposits[msg.sender] = UserDeposit({
@@ -184,11 +180,11 @@ contract DualTokenYieldVault is Ownable, ReentrancyGuard {
         btcTotalDeposited = btcTotalDeposited.add(amount);
         btcTotalValueLocked = btcTotalValueLocked.add(amount);
 
-        emit DepositBTC(msg.sender, amount, lstBTCToMint);
+        emit DepositBTC(msg.sender, amount, reBTCToMint);
     }
 
     /**
-     * @dev User deposits WETH and receives lstWETH
+     * @dev User deposits WETH and receives ReWETH
      * @param amount Amount of WETH to deposit
      */
     function depositWETH(uint256 amount) external nonReentrant {
@@ -206,21 +202,21 @@ contract DualTokenYieldVault is Ownable, ReentrancyGuard {
         // Deposit into lending protocol
         lendingProtocol.deposit(address(wethToken), amount);
 
-        // Calculate lstWETH amount to mint with decimal adjustment
-        uint256 lstWETHToMint;
-        if (LST_DECIMALS > wethDecimals) {
-            // If lstWETH has more decimals than WETH, multiply
-            lstWETHToMint = amount.mul(10 ** (LST_DECIMALS - wethDecimals));
-        } else if (LST_DECIMALS < wethDecimals) {
-            // If lstWETH has fewer decimals than WETH, divide
-            lstWETHToMint = amount.div(10 ** (wethDecimals - LST_DECIMALS));
+        // Calculate ReWETH amount to mint with decimal adjustment
+        uint256 reWETHToMint;
+        if (RE_DECIMALS > wethDecimals) {
+            // If ReWETH has more decimals than WETH, multiply
+            reWETHToMint = amount.mul(10 ** (RE_DECIMALS - wethDecimals));
+        } else if (RE_DECIMALS < wethDecimals) {
+            // If ReWETH has fewer decimals than WETH, divide
+            reWETHToMint = amount.div(10 ** (wethDecimals - RE_DECIMALS));
         } else {
             // If same number of decimals, 1:1 ratio
-            lstWETHToMint = amount;
+            reWETHToMint = amount;
         }
 
-        // Mint lstWETH to user
-        lstWETHToken.mint(msg.sender, lstWETHToMint);
+        // Mint ReWETH to user
+        reWETHToken.mint(msg.sender, reWETHToMint);
 
         // Update user deposit info
         userWethDeposits[msg.sender] = UserDeposit({
@@ -232,18 +228,18 @@ contract DualTokenYieldVault is Ownable, ReentrancyGuard {
         wethTotalDeposited = wethTotalDeposited.add(amount);
         wethTotalValueLocked = wethTotalValueLocked.add(amount);
 
-        emit DepositWETH(msg.sender, amount, lstWETHToMint);
+        emit DepositWETH(msg.sender, amount, reWETHToMint);
     }
 
     /**
-     * @dev User withdraws BTC by burning lstBTC after lock period
-     * @param lstBTCAmount Amount of lstBTC to burn
+     * @dev User withdraws BTC by burning ReBTC after lock period
+     * @param reBTCAmount Amount of ReBTC to burn
      */
-    function withdrawBTC(uint256 lstBTCAmount) external nonReentrant {
-        require(lstBTCAmount > 0, "Amount must be greater than 0");
+    function withdrawBTC(uint256 reBTCAmount) external nonReentrant {
+        require(reBTCAmount > 0, "Amount must be greater than 0");
         require(
-            lstBTCToken.balanceOf(msg.sender) >= lstBTCAmount,
-            "Insufficient lstBTC balance"
+            reBTCToken.balanceOf(msg.sender) >= reBTCAmount,
+            "Insufficient ReBTC balance"
         );
 
         UserDeposit storage userDeposit = userBtcDeposits[msg.sender];
@@ -253,13 +249,13 @@ contract DualTokenYieldVault is Ownable, ReentrancyGuard {
         );
 
         // Calculate BTC amount to withdraw, including yield
-        uint256 btcToWithdraw = calculateBTCAmount(lstBTCAmount);
+        uint256 btcToWithdraw = calculateBTCAmount(reBTCAmount);
 
         // Withdraw from lending protocol
         lendingProtocol.withdraw(address(btcToken), btcToWithdraw);
 
-        // Burn lstBTC tokens
-        lstBTCToken.burn(msg.sender, lstBTCAmount);
+        // Burn ReBTC tokens
+        reBTCToken.burn(msg.sender, reBTCAmount);
 
         // Transfer BTC to user
         require(
@@ -280,18 +276,18 @@ contract DualTokenYieldVault is Ownable, ReentrancyGuard {
             ? btcTotalValueLocked.sub(btcToWithdraw)
             : 0;
 
-        emit WithdrawBTC(msg.sender, btcToWithdraw, lstBTCAmount);
+        emit WithdrawBTC(msg.sender, btcToWithdraw, reBTCAmount);
     }
 
     /**
-     * @dev User withdraws WETH by burning lstWETH after lock period
-     * @param lstWETHAmount Amount of lstWETH to burn
+     * @dev User withdraws WETH by burning ReWETH after lock period
+     * @param reWETHAmount Amount of ReWETH to burn
      */
-    function withdrawWETH(uint256 lstWETHAmount) external nonReentrant {
-        require(lstWETHAmount > 0, "Amount must be greater than 0");
+    function withdrawWETH(uint256 reWETHAmount) external nonReentrant {
+        require(reWETHAmount > 0, "Amount must be greater than 0");
         require(
-            lstWETHToken.balanceOf(msg.sender) >= lstWETHAmount,
-            "Insufficient lstWETH balance"
+            reWETHToken.balanceOf(msg.sender) >= reWETHAmount,
+            "Insufficient ReWETH balance"
         );
 
         UserDeposit storage userDeposit = userWethDeposits[msg.sender];
@@ -301,13 +297,13 @@ contract DualTokenYieldVault is Ownable, ReentrancyGuard {
         );
 
         // Calculate WETH amount to withdraw, including yield
-        uint256 wethToWithdraw = calculateWETHAmount(lstWETHAmount);
+        uint256 wethToWithdraw = calculateWETHAmount(reWETHAmount);
 
         // Withdraw from lending protocol
         lendingProtocol.withdraw(address(wethToken), wethToWithdraw);
 
-        // Burn lstWETH tokens
-        lstWETHToken.burn(msg.sender, lstWETHAmount);
+        // Burn ReWETH tokens
+        reWETHToken.burn(msg.sender, reWETHAmount);
 
         // Transfer WETH to user
         require(
@@ -328,32 +324,32 @@ contract DualTokenYieldVault is Ownable, ReentrancyGuard {
             ? wethTotalValueLocked.sub(wethToWithdraw)
             : 0;
 
-        emit WithdrawWETH(msg.sender, wethToWithdraw, lstWETHAmount);
+        emit WithdrawWETH(msg.sender, wethToWithdraw, reWETHAmount);
     }
 
     /**
-     * @dev Calculate amount of BTC for a given lstBTC amount
-     * @param lstBTCAmount Amount of lstBTC
+     * @dev Calculate amount of BTC for a given ReBTC amount
+     * @param reBTCAmount Amount of ReBTC
      * @return BTC amount including yield
      */
     function calculateBTCAmount(
-        uint256 lstBTCAmount
+        uint256 reBTCAmount
     ) public view returns (uint256) {
-        uint256 lstBTCTotalSupply = lstBTCToken.totalSupply();
-        if (lstBTCTotalSupply == 0) return 0;
+        uint256 reBTCTotalSupply = reBTCToken.totalSupply();
+        if (reBTCTotalSupply == 0) return 0;
 
-        // Calculate BTC amount based on the proportion of lstBTC being withdrawn
-        uint256 btcAmount = lstBTCAmount.mul(btcTotalValueLocked).div(
-            lstBTCTotalSupply
+        // Calculate BTC amount based on the proportion of ReBTC being withdrawn
+        uint256 btcAmount = reBTCAmount.mul(btcTotalValueLocked).div(
+            reBTCTotalSupply
         );
 
-        // Convert from lstBTC decimals to BTC decimals
-        if (LST_DECIMALS > btcDecimals) {
-            // If lstBTC has more decimals than BTC, divide
-            return btcAmount.div(10 ** (LST_DECIMALS - btcDecimals));
-        } else if (LST_DECIMALS < btcDecimals) {
-            // If lstBTC has fewer decimals than BTC, multiply
-            return btcAmount.mul(10 ** (btcDecimals - LST_DECIMALS));
+        // Convert from ReBTC decimals to BTC decimals
+        if (RE_DECIMALS > btcDecimals) {
+            // If ReBTC has more decimals than BTC, divide
+            return btcAmount.div(10 ** (RE_DECIMALS - btcDecimals));
+        } else if (RE_DECIMALS < btcDecimals) {
+            // If ReBTC has fewer decimals than BTC, multiply
+            return btcAmount.mul(10 ** (btcDecimals - RE_DECIMALS));
         } else {
             // If same number of decimals, no adjustment needed
             return btcAmount;
@@ -361,28 +357,28 @@ contract DualTokenYieldVault is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @dev Calculate amount of WETH for a given lstWETH amount
-     * @param lstWETHAmount Amount of lstWETH
+     * @dev Calculate amount of WETH for a given ReWETH amount
+     * @param reWETHAmount Amount of ReWETH
      * @return WETH amount including yield
      */
     function calculateWETHAmount(
-        uint256 lstWETHAmount
+        uint256 reWETHAmount
     ) public view returns (uint256) {
-        uint256 lstWETHTotalSupply = lstWETHToken.totalSupply();
-        if (lstWETHTotalSupply == 0) return 0;
+        uint256 reWETHTotalSupply = reWETHToken.totalSupply();
+        if (reWETHTotalSupply == 0) return 0;
 
-        // Calculate WETH amount based on the proportion of lstWETH being withdrawn
-        uint256 wethAmount = lstWETHAmount.mul(wethTotalValueLocked).div(
-            lstWETHTotalSupply
+        // Calculate WETH amount based on the proportion of ReWETH being withdrawn
+        uint256 wethAmount = reWETHAmount.mul(wethTotalValueLocked).div(
+            reWETHTotalSupply
         );
 
-        // Convert from lstWETH decimals to WETH decimals
-        if (LST_DECIMALS > wethDecimals) {
-            // If lstWETH has more decimals than WETH, divide
-            return wethAmount.div(10 ** (LST_DECIMALS - wethDecimals));
-        } else if (LST_DECIMALS < wethDecimals) {
-            // If lstWETH has fewer decimals than WETH, multiply
-            return wethAmount.mul(10 ** (wethDecimals - LST_DECIMALS));
+        // Convert from ReWETH decimals to WETH decimals
+        if (RE_DECIMALS > wethDecimals) {
+            // If ReWETH has more decimals than WETH, divide
+            return wethAmount.div(10 ** (RE_DECIMALS - wethDecimals));
+        } else if (RE_DECIMALS < wethDecimals) {
+            // If ReWETH has fewer decimals than WETH, multiply
+            return wethAmount.mul(10 ** (wethDecimals - RE_DECIMALS));
         } else {
             // If same number of decimals, no adjustment needed
             return wethAmount;
@@ -489,5 +485,18 @@ contract DualTokenYieldVault is Ownable, ReentrancyGuard {
      */
     function setLockPeriod(uint256 _lockPeriod) external onlyOwner {
         lockPeriod = _lockPeriod;
+    }
+
+    /**
+     * @dev Emergency function to recover tokens sent to this contract by mistake
+     * @param token Token to recover
+     * @param amount Amount to recover
+     */
+    function recoverToken(address token, uint256 amount) external onlyOwner {
+        require(
+            token != address(btcToken) && token != address(wethToken),
+            "Cannot recover deposit tokens"
+        );
+        IERC20(token).transfer(owner(), amount);
     }
 }

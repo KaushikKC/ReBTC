@@ -9,6 +9,10 @@ export const LSTBTC_TOKEN_ADDRESS =
 // Contract addresses
 export const LENDING_CONTRACT_ADDRESS =
   "0x9f001D22425b8d4CFD95a4cFe86183D82F68C4fD";
+export const INSURANCE_CONTRACT_ADDRESS =
+  "0x5A7Fd8e5EB1f1F9B0f7F4a83a2D0b5f5F5f5f5f5"; // Replace with actual insurance contract address
+export const FLASH_LOAN_CONTRACT_ADDRESS =
+  "0x19079b097C72e5A2520Ee4fA8Ef1B9f9DDd75Fcf"; // Flash loan contract address
 
 export const USDC_TOKEN_ADDRESS = "0x14f58BeB7b9A25DF974c1BE245A7385B425337B3"; // USDC token address
 export const USDT_TOKEN_ADDRESS = "0x0AC13581b7797E0c94d82966e6eF65654C193f5B"; // USDT token address
@@ -17,7 +21,75 @@ export const LOAN_RECEIVER_ADDRESS =
 export const INSURANCE_POOL_ADDRESS =
   "0xC94f840066C6fa664CA96Dc8c8f499B77b7E57ad";
 
+// Add this to your existing contract addresses
+export const FAUCET_CONTRACT_ADDRESS =
+  "0x6E3f2C97B4Ab1c45AA324fD69A8028EE8a6055Ae"; // Faucet contract address
+
+// Add this to your existing contract ABIs
+export const FAUCET_CONTRACT_ABI = [
+  // View functions
+  "function getTokenBalance(address token) external view returns (uint256)",
+  "function getLastRequestTime(address user, address token) external view returns (uint256)",
+  "function getDailyLimit(address token) external view returns (uint256)",
+  "function getRequestsRemaining(address user, address token) external view returns (uint256)",
+  "function cooldownPeriod() external view returns (uint256)",
+  "function requestAmounts(address token) external view returns (uint256)",
+
+  // State-changing functions
+  "function requestBTC() external",
+  "function requestlstBTC() external",
+  "function requestUSDC() external",
+  "function requestUSDT() external",
+
+  // Admin functions
+  "function setDailyLimit(address token, uint256 limit) external",
+  "function setRequestAmount(address token, uint256 amount) external",
+  "function setCooldownPeriod(uint256 period) external",
+  "function withdrawTokens(address token, uint256 amount) external",
+
+  // Events
+  "event TokensRequested(address indexed user, address indexed token, uint256 amount)",
+  "event DailyLimitUpdated(address indexed token, uint256 newLimit)",
+  "event RequestAmountUpdated(address indexed token, uint256 newAmount)",
+  "event CooldownPeriodUpdated(uint256 newPeriod)",
+];
+
 // Contract ABIs
+export const FLASH_LOAN_CONTRACT_ABI = [
+  // View functions
+  "function getFlashLoanFee() external view returns (uint256)",
+  "function getAvailableLiquidity() external view returns (uint256)",
+  "function getUtilizationRate() external view returns (uint256)",
+
+  // State-changing functions
+  "function exchangeLstBtcForStablecoin(uint256 lstBtcAmount, bool useUsdt) external",
+  "function flashLoan(address receiver, uint256 amount, bytes calldata params) external",
+
+  // Events
+  "event FlashLoan(address indexed receiver, uint256 amount, uint256 fee)",
+  "event Exchange(address indexed user, uint256 lstBtcAmount, uint256 stablecoinAmount, bool isUsdt)",
+];
+
+export const INSURANCE_CONTRACT_ABI = [
+  // View functions
+  "function policies(uint256 _policyId) external view returns (address policyholder, uint256 coverageAmount, uint256 premium, uint256 startTimestamp, uint256 expirationTimestamp, uint8 status, bool claimed, uint8 coverageType)",
+  "function policyCount() external view returns (uint256)",
+  "function poolBalance() external view returns (uint256)",
+  "function getPolicyStatus(uint256 _policyId) external view returns (uint8)",
+  "function getUserPolicies(address _user) external view returns (uint256[])",
+
+  // State-changing functions
+  "function applyForInsurance(uint256 _coverageAmount, uint8 _coverageType, uint256 _durationDays) external returns (uint256)",
+  "function claimInsurance(uint256 _policyId, uint256 _claimAmount) external",
+  "function cancelPolicy(uint256 _policyId) external",
+
+  // Events
+  "event PolicyCreated(uint256 indexed policyId, address indexed policyholder, uint256 coverageAmount, uint256 premium, uint256 expirationTimestamp, uint8 coverageType)",
+  "event ClaimPaid(uint256 indexed policyId, address indexed policyholder, uint256 amount)",
+  "event PolicyStatusChanged(uint256 indexed policyId, uint8 status)",
+  "event PolicyCancelled(uint256 indexed policyId, address indexed policyholder)",
+];
+
 export const LENDING_CONTRACT_ABI = [
   // View functions
   "function getBtcPrice() external view returns (uint256)",

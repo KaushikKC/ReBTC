@@ -151,10 +151,10 @@ export default function Insurance() {
             ))}
           </div>
 
-          {/* Active Insurances Section */}
+          {/* Active Insurances Section -- backend api needed */}
           <div className="bg-[#1C2128] rounded-xl p-6 overflow-x-auto mb-8">
             <h3 className="text-xl font-bold text-white mb-4">
-              Your Active Insurance Policies
+              Active Insurance
             </h3>
 
             {activeInsurances.length === 0 ? (

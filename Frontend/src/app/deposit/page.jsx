@@ -32,7 +32,7 @@ const TOKEN_ABI = [
 ];
 
 // Contract addresses - replace with your actual deployed contract addresses
-const DEPOSIT_CONTRACT_ADDRESS = "0x922F892557e4CBa52d78dBaE8199cE4836A4cF94"; // Replace with your contract address
+const DEPOSIT_CONTRACT_ADDRESS = "0x7d4829CC2a64517E52F538a2bDD83841Dcf8349b"; // Replace with your contract address
 const BTC_TOKEN_ADDRESS = "0x579721ACfFeDD19dC61685d496E68ee346aA100a"; // Replace with BTC token address
 const WBTC_TOKEN_ADDRESS = "0x789..."; // Replace with WBTC token address
 const WETH_TOKEN_ADDRESS = "0x9e42e9D0f548314415833C5F3d69C95774E6c395"; // Replace with WETH token address
