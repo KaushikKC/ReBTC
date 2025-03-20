@@ -6,8 +6,7 @@ const config = require("../src/config/config");
 
 // Import routes
 const vaultRoutes = require("./routes/vault");
-// We'll add more routes later
-
+const agentRoutes = require("./routes/agentRoutes");
 // Initialize express app
 const app = express();
 
@@ -19,6 +18,7 @@ app.use(express.json()); // Parse JSON bodies
 
 // API routes
 app.use(`${config.api.prefix}/vault`, vaultRoutes);
+app.use(`${config.api.prefix}/usdt-agent`, agentRoutes); // Add USDT agent routes
 // We'll add more routes here
 
 // Health check endpoint

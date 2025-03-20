@@ -14,10 +14,14 @@
     "nodemon": "^3.1.9"
   },
   "dependencies": {
+    "@langchain/core": "^0.3.42",
+    "@langchain/langgraph": "^0.2.57",
+    "@langchain/openai": "^0.4.5",
     "cors": "^2.8.5",
     "ethers": "^6.13.5",
     "express": "^4.21.2",
     "helmet": "^8.1.0",
-    "morgan": "^1.10.0"
+    "morgan": "^1.10.0",
+    "node-cron": "^3.0.3"
   }
 }
