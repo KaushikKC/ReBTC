@@ -12,9 +12,7 @@
 
 0x14f58BeB7b9A25DF974c1BE245A7385B425337B3 -> USDC txHash -> https://scan.test2.btcs.network/tx/0x45c81738b6669c83e5c4534d754f6c269926fd7fb29dc2e1db3ddbd97ea7fc8a
 
-0x2EeC315014d29Bf65117aaC32eA6eb165C083cF7 -> lstBtcToken txHash ->
-
-0xE1560fD93F89930e3C43eE1801D90F4BA3298d0c -> BTCCollateralizedLending.sol
+0x0878fAF7697Ba41B88C1E76CF4BC19A589403C3a -> BTCCollateralizedLending.sol
 
 0x4cb61fa894795B6252242A0186bb13a2A5F42142 -> LoanReciever.sol txHash -> https://scan.test2.btcs.network/tx/0x56925712456eaac5a150f803b49916c089a20683654f3aa592dc880671eb07c0 (LsBTC token passed as the constructor)
 
