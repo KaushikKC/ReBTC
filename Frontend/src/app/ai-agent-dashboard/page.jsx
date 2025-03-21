@@ -52,16 +52,8 @@ export default function AIAgentDashboard() {
         name: "Price Monitor",
         type: "Price Monitoring",
         status: "active",
-        profit: "2.3%",
-        risk: "low",
-      },
-      {
-        id: 2,
-        name: "Yield Optimizer",
-        type: "Yield Optimization",
-        status: "active",
-        profit: "1.8%",
-        risk: "medium",
+        profit: "0.09",
+        risk: "High",
       },
     ]);
 
