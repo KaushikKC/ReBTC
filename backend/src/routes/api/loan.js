@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 
 // Import the loan controller
-const loanController = require("../../controllers/loanController");
+const loanController = require("../../controllers/LoanController");
 
 // Define a simple fallback handler for undefined routes
 const notImplemented = (req, res) => {
