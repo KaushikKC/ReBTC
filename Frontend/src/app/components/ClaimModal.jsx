@@ -325,7 +325,7 @@ const ClaimModal = ({ policy, onClose }) => {
             </div>
             <div className="flex justify-between">
               <span className="text-gray-400">Coverage:</span>
-              <span className="text-white">{policy.coverageAmount} BTC</span>
+              <span className="text-white">{policy.coverageAmount} lstBTC</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-400">Expiry:</span>

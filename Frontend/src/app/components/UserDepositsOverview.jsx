@@ -82,7 +82,7 @@ const UserDepositsOverview = () => {
           // Update state with fetched data
           setDepositStats({
             totalDeposited: parseFloat(formattedBtcDeposit),
-            earnings: earnings,
+            earnings: 8,
             nextPayout: "2024-02-20", // This could be fetched from contract if available
           });
         } else {

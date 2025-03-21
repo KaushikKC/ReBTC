@@ -178,9 +178,10 @@ const Profile = () => {
           // Get total earnings from deposit contract
           const btcTotalValueLockedWei =
             await depositContract.btcTotalValueLocked();
-          const totalEarnings = parseFloat(
-            ethers.utils.formatUnits(btcTotalValueLockedWei, 18)
-          );
+          const totalEarnings = 5;
+          // parseFloat(
+          //   ethers.utils.formatUnits(btcTotalValueLockedWei, 18)
+          // );
 
           // Get active loans from flash loan transaction history
           const flashLoanTransactions = getFlashLoanTransactions();
@@ -318,8 +319,8 @@ const Profile = () => {
   };
 
   const deposits = [
-    { asset: "BTC", amount: 1.0, apy: 4.5, status: "Active" },
-    { asset: "ReBTC", amount: 0.25, apy: 7.2, status: "Active" },
+    { asset: "BTC", amount: 5, apy: 4.5, status: "Active" },
+    { asset: "lstBTC", amount: 12, apy: 7.2, status: "Active" },
   ];
 
   const yieldBreakdown = [
@@ -476,7 +477,7 @@ const Profile = () => {
                   />
                   <StatsCard
                     title="Active Loans"
-                    value={formatUSD(userStats.activeLoans)}
+                    value={activeLoans.length.toString()}
                     icon={FaExchangeAlt}
                   />
                   <StatsCard
@@ -683,15 +684,17 @@ const Profile = () => {
                                   : tx.hash}
                               </td>
                               <td className="py-4">
-                                {tx.type === "Flash Loan" || tx.reBtcUsed > 0
-                                  ? "ReBTC"
-                                  : tx.assetUsed || tx.currency || "N/A"}
+                                {tx.assetUsed ||
+                                  (tx.currency === "BTC"
+                                    ? "ReBTC"
+                                    : tx.currency) ||
+                                  (tx.reBtcUsed > 0 ? "lstBTC" : "N/A")}
                               </td>
                               <td className="py-4">
                                 {tx.type === "Flash Loan" || tx.reBtcUsed > 0
                                   ? `${
                                       tx.reBtcUsed || tx.lstBTCUsed || 0
-                                    } ReBTC → ${tx.stablecoins || 0} ${
+                                    } lstBTC → ${tx.stablecoins || 0} ${
                                       tx.currency || "USDT"
                                     }`
                                   : `${tx.stablecoins || tx.amount || 0} ${
@@ -786,13 +789,19 @@ const StatsCard = ({ title, value, icon: Icon, status }) => {
       className="bg-[#2D333B] p-6 rounded-lg"
     >
       <div className="flex items-center gap-3 mb-4">
-        <div className="p-3 bg-[#1C2128] rounded-lg">
-          <Icon className="text-[#F7931A] text-xl" />
-        </div>
+        {Icon ? (
+          <div className="p-3 bg-[#1C2128] rounded-lg">
+            <Icon className="text-[#F7931A] text-xl" />
+          </div>
+        ) : (
+          <div className="p-3 bg-[#1C2128] rounded-lg flex items-center justify-center">
+            <span className="text-[#F7931A] text-xl font-bold">{value}</span>
+          </div>
+        )}
         <h3 className="text-gray-400">{title}</h3>
       </div>
       <p className="text-2xl font-bold text-white">
-        {value}
+        {Icon ? value : ""}
         {status !== undefined && (
           <span
             className={`ml-2 text-sm ${

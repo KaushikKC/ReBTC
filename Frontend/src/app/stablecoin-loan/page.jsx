@@ -1,5 +1,4 @@
 "use client";
-
 import React, { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Navbar from "../components/Navbar";
@@ -13,7 +12,7 @@ import { useAccount, useBalance } from "wagmi";
 import { usePrivy } from "@privy-io/react-auth";
 import { ethers } from "ethers";
 import { useDataContext } from "@/context/DataContext";
-import { toast } from "react-hot-toast";
+import { toast, Toaster } from "react-hot-toast"; // Import Toaster component
 import Footer from "../components/Footer";
 // Import contract constants
 import {
@@ -56,6 +55,64 @@ const StablecoinLoan = () => {
   });
 
   const PROFILE_TRANSACTIONS_KEY = "transactions";
+
+  // Custom toast for loan success
+  const showLoanSuccessToast = (receipt, amount, stablecoin) => {
+    const shortenedTxId = `${receipt.transactionHash.substring(
+      0,
+      6
+    )}...${receipt.transactionHash.substring(62)}`;
+
+    toast.custom(
+      (t) => (
+        <div
+          className={`${
+            t.visible ? "animate-enter" : "animate-leave"
+          } max-w-md w-full bg-[#2D333B] shadow-lg rounded-lg pointer-events-auto flex ring-1 ring-black ring-opacity-5`}
+        >
+          <div className="flex-1 w-0 p-4">
+            <div className="flex items-start">
+              <div className="flex-shrink-0 pt-0.5">
+                <div className="h-10 w-10 rounded-full bg-[#F7931A] flex items-center justify-center text-white">
+                  💰
+                </div>
+              </div>
+              <div className="ml-3 flex-1">
+                <p className="text-sm font-medium text-white">
+                  Loan Successfully Processed!
+                </p>
+                <p className="mt-1 text-xs text-gray-300">
+                  You've borrowed {amount.toLocaleString()} {stablecoin} using
+                  lstBTC as collateral.
+                </p>
+                <p className="mt-1 text-xs text-gray-400">
+                  Transaction ID:{" "}
+                  <span className="font-mono">{shortenedTxId}</span>
+                </p>
+                <a
+                  href={`https://scan.test2.btcs.network/tx/${receipt.transactionHash}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-1 inline-block text-xs text-blue-400 hover:text-blue-300 underline"
+                >
+                  View on Core Testnet
+                </a>
+              </div>
+            </div>
+          </div>
+          <div className="flex border-l border-gray-600">
+            <button
+              onClick={() => toast.dismiss(t.id)}
+              className="w-full border border-transparent rounded-none rounded-r-lg p-4 flex items-center justify-center text-sm font-medium text-gray-400 hover:text-gray-200 focus:outline-none"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      ),
+      { duration: 8000 }
+    );
+  };
 
   // Helper function to save transaction to profile storage
   const saveTransactionToProfile = (transaction) => {
@@ -104,7 +161,7 @@ const StablecoinLoan = () => {
 
     // Apply 2:1 ratio for lstBTC to USDT/USDC
     // 2 lstBTC = 1 USDT/USDC in value
-    const collateralValue = (parseFloat(collateralAmount) * btcPrice) / 2;
+    const collateralValue = parseFloat(collateralAmount) / 2;
 
     // Apply LTV percentage
     const loanAmount = (collateralValue * ltvPercentage) / 100;
@@ -113,7 +170,7 @@ const StablecoinLoan = () => {
     const fee = (loanAmount * originationFee) / 100;
     const amountAfterFee = loanAmount - fee;
 
-    return amountAfterFee;
+    return collateralValue;
   };
 
   // Set due date (30 days from now)
@@ -183,6 +240,7 @@ const StablecoinLoan = () => {
       }
     } catch (error) {
       console.error("Error fetching contract data:", error);
+      toast.error("Failed to fetch market data. Using default values.");
     }
   };
 
@@ -261,7 +319,7 @@ const StablecoinLoan = () => {
             const formattedLoan = {
               id: `USDC-${address.slice(0, 6)}`,
               collateral: collateralAmount,
-              borrowed: parseFloat(ethers.utils.formatUnits(usdcDebt, 6)), // USDC uses 6 decimals
+              borrowed: parseFloat(ethers.utils.formatUnits(usdcDebt, 18)), // USDC uses 6 decimals
               currency: "USDC",
               interest: interestRate, // Use the fetched interest rate
               dueDate: "Ongoing", // Loans don't have fixed due dates in this contract
@@ -279,7 +337,7 @@ const StablecoinLoan = () => {
             const formattedLoan = {
               id: `USDT-${address.slice(0, 6)}`,
               collateral: collateralAmount,
-              borrowed: parseFloat(ethers.utils.formatUnits(usdtDebt, 6)), // USDT uses 6 decimals
+              borrowed: parseFloat(ethers.utils.formatUnits(usdtDebt, 18)), // USDT uses 6 decimals
               currency: "USDT",
               interest: interestRate, // Use the fetched interest rate
               dueDate: "Ongoing", // Loans don't have fixed due dates in this contract
@@ -317,6 +375,15 @@ const StablecoinLoan = () => {
       return;
     }
 
+    // Check if collateral amount is greater than available balance
+    if (parseFloat(collateralAmount) > availableBtcBalance) {
+      toast.error("Insufficient lstBTC balance");
+      return;
+    }
+
+    let approveToastId;
+    let borrowToastId;
+
     try {
       setIsLoading(true);
 
@@ -344,20 +411,21 @@ const StablecoinLoan = () => {
       // Calculate loan amount in wei
       const loanAmountInWei = ethers.utils.parseUnits(
         calculateLoanAmount().toString(),
-        6 // USDC and USDT both use 6 decimals
+        18 // USDC and USDT both use 6 decimals
       );
 
       // Step 1: Approve lstBTC transfer for collateral
-      toast.loading("Approving lstBTC transfer...");
+      approveToastId = toast.loading("Approving lstBTC transfer...");
       const approveTx = await btcToken.approve(
         LENDING_CONTRACT_ADDRESS,
         collateralInWei
       );
       await approveTx.wait();
-      toast.dismiss();
+      toast.dismiss(approveToastId);
+      toast.success("lstBTC transfer approved!");
 
       // Step 2: Call depositAndBorrow function
-      toast.loading(
+      borrowToastId = toast.loading(
         `Depositing collateral and borrowing ${selectedStablecoin}...`
       );
       const isUSDT = selectedStablecoin === "USDT";
@@ -369,7 +437,7 @@ const StablecoinLoan = () => {
       );
 
       const receipt = await borrowTx.wait();
-      toast.dismiss();
+      toast.dismiss(borrowToastId);
 
       // Save transaction to profile storage
       const profileTransaction = {
@@ -399,16 +467,18 @@ const StablecoinLoan = () => {
         }
       }
 
-      toast.success(
-        `Successfully borrowed ${calculateLoanAmount().toLocaleString()} ${selectedStablecoin}`
-      );
+      // Show custom success toast with transaction details
+      showLoanSuccessToast(receipt, calculateLoanAmount(), selectedStablecoin);
 
       // Reset form and refresh loans
       setCollateralAmount("");
       fetchUserLoanPosition();
     } catch (error) {
       console.error("Borrow error:", error);
-      toast.dismiss();
+
+      // Dismiss any pending toasts
+      if (approveToastId) toast.dismiss(approveToastId);
+      if (borrowToastId) toast.dismiss(borrowToastId);
 
       // Handle specific error messages
       if (error.message.includes("Transfer failed")) {
@@ -423,6 +493,8 @@ const StablecoinLoan = () => {
         toast.error(
           `Insufficient ${selectedStablecoin} in the contract. Please try a smaller amount or different stablecoin.`
         );
+      } else if (error.message.includes("user rejected transaction")) {
+        toast.error("Transaction rejected by user");
       } else {
         toast.error(`Failed to borrow: ${error.message || "Unknown error"}`);
       }
@@ -430,8 +502,65 @@ const StablecoinLoan = () => {
       setIsLoading(false);
     }
   };
+
   // Handle loan repayment success
-  const handleRepaymentSuccess = () => {
+  const handleRepaymentSuccess = (receipt) => {
+    // Show success toast with transaction details
+    const shortenedTxId = `${receipt.transactionHash.substring(
+      0,
+      6
+    )}...${receipt.transactionHash.substring(62)}`;
+
+    toast.custom(
+      (t) => (
+        <div
+          className={`${
+            t.visible ? "animate-enter" : "animate-leave"
+          } max-w-md w-full bg-[#2D333B] shadow-lg rounded-lg pointer-events-auto flex ring-1 ring-black ring-opacity-5`}
+        >
+          <div className="flex-1 w-0 p-4">
+            <div className="flex items-start">
+              <div className="flex-shrink-0 pt-0.5">
+                <div className="h-10 w-10 rounded-full bg-green-500 flex items-center justify-center text-white">
+                  ✓
+                </div>
+              </div>
+              <div className="ml-3 flex-1">
+                <p className="text-sm font-medium text-white">
+                  Loan Repayment Successful!
+                </p>
+                <p className="mt-1 text-xs text-gray-300">
+                  Your loan has been repaid and collateral released.
+                </p>
+                <p className="mt-1 text-xs text-gray-400">
+                  Transaction ID:{" "}
+                  <span className="font-mono">{shortenedTxId}</span>
+                </p>
+                <a
+                  href={`https://sepolia.etherscan.io/tx/${receipt.transactionHash}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-1 inline-block text-xs text-blue-400 hover:text-blue-300 underline"
+                >
+                  View on Etherscan
+                </a>
+              </div>
+            </div>
+          </div>
+          <div className="flex border-l border-gray-600">
+            <button
+              onClick={() => toast.dismiss(t.id)}
+              className="w-full border border-transparent rounded-none rounded-r-lg p-4 flex items-center justify-center text-sm font-medium text-gray-400 hover:text-gray-200 focus:outline-none"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      ),
+      { duration: 8000 }
+    );
+
+    // Refresh loan positions
     fetchUserLoanPosition();
   };
 
@@ -451,6 +580,30 @@ const StablecoinLoan = () => {
     <div className="relative z-10 font-['Quantify'] tracking-[1px] bg-[#0D1117] min-h-screen flex flex-col">
       <Navbar />
 
+      {/* Add Toaster component */}
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          duration: 5000,
+          style: {
+            background: "#2D333B",
+            color: "#fff",
+            border: "1px solid #373E47",
+          },
+          success: {
+            iconTheme: {
+              primary: "#F7931A",
+              secondary: "#fff",
+            },
+          },
+          error: {
+            iconTheme: {
+              primary: "#ff4b4b",
+              secondary: "#fff",
+            },
+          },
+        }}
+      />
       {/* Navigation Buttons */}
       <div className="flex-grow flex flex-col items-center px-4 pt-32">
         <div className="flex flex-wrap justify-center pb-16 gap-4 md:gap-8 w-full max-w-7xl">

@@ -11,7 +11,7 @@ import { usePrivy } from "@privy-io/react-auth";
 import { useAccount, useBalance } from "wagmi";
 import { ethers } from "ethers";
 import { useDataContext } from "../../context/DataContext";
-import { toast } from "react-hot-toast";
+import { toast, Toaster } from "react-hot-toast";
 import TimeLoader from "../components/TimeLoader";
 import Footer from "../components/Footer";
 import { SiStreamrunners } from "react-icons/si";
@@ -119,28 +119,49 @@ function Deposit() {
   };
 
   // Fetch user balances for all tokens
+  // Fetch user balances for all tokens
   const fetchUserBalances = async () => {
     try {
+      setIsInitialLoading(true);
       const balances = {};
 
       for (const crypto of cryptoOptions) {
-        const tokenContract = await getContractInstance(
-          crypto.tokenAddress,
-          TOKEN_ABI
-        );
+        try {
+          const tokenContract = await getContractInstance(
+            crypto.tokenAddress,
+            TOKEN_ABI
+          );
 
-        if (tokenContract) {
-          const balance = await tokenContract.balanceOf(address);
-          const decimals = await tokenContract.decimals();
+          if (tokenContract) {
+            const balance = await tokenContract.balanceOf(address);
 
-          // Format balance based on token decimals
-          balances[crypto.id] = ethers.utils.formatUnits(balance, decimals);
+            // Format balance based on token decimals
+            balances[crypto.id] = ethers.utils.formatUnits(
+              balance,
+              crypto.decimals
+            );
+            console.log(`Fetched ${crypto.id} balance:`, balances[crypto.id]);
+          } else {
+            console.warn(`Could not get contract instance for ${crypto.id}`);
+          }
+        } catch (err) {
+          console.error(`Error fetching balance for ${crypto.id}:`, err);
+          balances[crypto.id] = "0";
         }
       }
 
+      console.log("All user balances:", balances);
       setUserBalances(balances);
     } catch (error) {
-      console.error("Error fetching balances:", error);
+      console.error("Error in fetchUserBalances:", error);
+      // Set default values to prevent UI from breaking
+      setUserBalances({
+        btc: "0",
+        wbtc: "0",
+        weth: "0",
+      });
+    } finally {
+      setIsInitialLoading(false);
     }
   };
 
@@ -153,20 +174,79 @@ function Deposit() {
       );
 
       if (depositContract) {
-        const btcTVL = await depositContract.btcTotalValueLocked();
-        const wethTVL = await depositContract.wethTotalValueLocked();
+        try {
+          const btcTVL = await depositContract.btcTotalValueLocked();
+          console.log("Raw BTC TVL:", btcTVL.toString());
 
-        setTvl({
-          btc: ethers.utils.formatUnits(btcTVL, 8), // BTC has 8 decimals
-          wbtc: ethers.utils.formatUnits(btcTVL, 8), // WBTC has 8 decimals
-          weth: ethers.utils.formatUnits(wethTVL, 18), // WETH has 18 decimals
-        });
+          let wethTVL;
+          try {
+            wethTVL = await depositContract.wethTotalValueLocked();
+            console.log("Raw WETH TVL:", wethTVL.toString());
+          } catch (wethErr) {
+            console.error("Error fetching WETH TVL:", wethErr);
+            wethTVL = ethers.BigNumber.from(0);
+          }
+
+          setTvl({
+            btc: ethers.utils.formatUnits(btcTVL, 8), // BTC has 8 decimals
+            wbtc: ethers.utils.formatUnits(btcTVL, 8), // WBTC has 8 decimals
+            weth: ethers.utils.formatUnits(wethTVL, 18), // WETH has 18 decimals
+          });
+
+          console.log("Formatted TVL values:", {
+            btc: ethers.utils.formatUnits(btcTVL, 8),
+            weth: ethers.utils.formatUnits(wethTVL, 18),
+          });
+        } catch (err) {
+          console.error("Error calling TVL methods:", err);
+          // Check if there's a typo in the contract method name
+          console.log(
+            "Available contract methods:",
+            Object.keys(depositContract.functions)
+          );
+
+          // Set default values
+          setTvl({
+            btc: "0",
+            wbtc: "0",
+            weth: "0",
+          });
+        }
+      } else {
+        console.error("Could not get deposit contract instance");
       }
     } catch (error) {
-      console.error("Error fetching TVL:", error);
+      console.error("Error in fetchTVL:", error);
+      // Set default values to prevent UI from breaking
+      setTvl({
+        btc: "0",
+        wbtc: "0",
+        weth: "0",
+      });
     }
   };
 
+  // Update useEffect to ensure it runs properly
+  useEffect(() => {
+    if (address) {
+      console.log("Fetching balances and TVL for address:", address);
+      fetchUserBalances();
+      fetchTVL();
+    } else {
+      console.log("No wallet address available");
+      // Set default values when no address is available
+      setUserBalances({
+        btc: "0",
+        wbtc: "0",
+        weth: "0",
+      });
+      setTvl({
+        btc: "0",
+        wbtc: "0",
+        weth: "0",
+      });
+    }
+  }, [address]);
   const handleMaxClick = () => {
     if (userBalances[selectedCrypto.id]) {
       setAmount(userBalances[selectedCrypto.id]);
@@ -242,17 +322,50 @@ function Deposit() {
       const receipt = await depositTx.wait();
       toast.dismiss();
 
+      // Success toast for the deposit
       toast.success(`Successfully deposited ${amount} ${selectedCrypto.name}`);
+
+      // Add a separate toast for ReBTC receipt with transaction ID
+      const shortenedTxId = `${receipt.transactionHash.substring(
+        0,
+        6
+      )}...${receipt.transactionHash.substring(62)}`;
+      toast.success(
+        <div>
+          <p>Received ReBTC in your wallet!</p>
+          <p className="text-xs mt-1">
+            Transaction ID: <span className="font-mono">{shortenedTxId}</span>
+          </p>
+          <p className="text-xs mt-1">
+            <a
+              href={`https://scan.test2.btcs.network/tx/${receipt.transactionHash}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-400 underline"
+            >
+              View on Etherscan
+            </a>
+          </p>
+        </div>,
+        {
+          duration: 6000, // Show for 6 seconds
+          style: {
+            border: "1px solid #F7931A",
+            padding: "16px",
+          },
+          icon: "🔄",
+        }
+      );
 
       // Save transaction to profile storage
       const profileTransaction = {
         hash: receipt.transactionHash,
-        reBtcUsed: 0, // Not using ReBTC for deposits
+        reBtcUsed: parseFloat(amount), // Now tracking ReBTC received
         stablecoins: parseFloat(amount),
         currency: selectedCrypto.name,
         status: "Completed",
         type: "Deposit",
-        description: `Deposited ${amount} ${selectedCrypto.name}`,
+        description: `Deposited ${amount} ${selectedCrypto.name} and received ReBTC`,
         userAddress: address,
         timestamp: new Date().toISOString(),
       };
@@ -301,6 +414,29 @@ function Deposit() {
   return (
     <div className="relative z-10 font-['Quantify'] tracking-[1px] bg-[#0D1117] flex flex-col">
       <Navbar />
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          duration: 5000,
+          style: {
+            background: "#2D333B",
+            color: "#fff",
+            border: "1px solid #373E47",
+          },
+          success: {
+            iconTheme: {
+              primary: "#F7931A",
+              secondary: "#fff",
+            },
+          },
+          error: {
+            iconTheme: {
+              primary: "#ff4b4b",
+              secondary: "#fff",
+            },
+          },
+        }}
+      />
 
       <div className="flex-grow flex justify-center px-4 pt-32">
         <div className="flex flex-wrap justify-center pb-16 gap-4 md:gap-8 w-full max-w-7xl">
