@@ -1,22 +1,12 @@
 const mongoose = require("mongoose");
 const Schema = mongoose.Schema;
 
-const TransactionSchema = new Schema({
+const DepositSchema = new Schema({
   userAddress: {
     type: String,
     required: true,
     lowercase: true,
     trim: true,
-    index: true,
-  },
-  txHash: {
-    type: String,
-    required: true,
-    unique: true,
-  },
-  type: {
-    type: String,
-    required: true,
     index: true,
   },
   amount: {
@@ -28,10 +18,28 @@ const TransactionSchema = new Schema({
     required: true,
     index: true,
   },
+  txHash: {
+    type: String,
+    required: true,
+    unique: true,
+  },
   status: {
     type: String,
     enum: ["Pending", "Completed", "Failed"],
     default: "Pending",
+  },
+  type: {
+    type: String,
+    default: "Deposit",
+  },
+  apy: {
+    type: Number,
+  },
+  withdrawalTxHash: {
+    type: String,
+  },
+  withdrawalDate: {
+    type: Date,
   },
   details: {
     type: Object,
@@ -47,12 +55,9 @@ const TransactionSchema = new Schema({
 });
 
 // Update the updatedAt field on save
-TransactionSchema.pre("save", function (next) {
+DepositSchema.pre("save", function (next) {
   this.updatedAt = Date.now();
   next();
 });
 
-// Create compound index for faster queries
-TransactionSchema.index({ userAddress: 1, createdAt: -1 });
-
-module.exports = mongoose.model("Transaction", TransactionSchema);
+module.exports = mongoose.model("Deposit", DepositSchema);

@@ -1,33 +1,28 @@
-import express from "express";
-import {
-  getUserProfile,
-  getUserDeposits,
-  getYieldBreakdown,
-  getActiveLoans,
-  getTransactionHistory,
-  getLstBtcDepositCount,
-  updateLstBtcDepositCount,
-  getActiveLoansCount,
-  getDepositAssets,
-  getRebtcRewards,
-} from "../../controllers/profileController";
-
+const express = require("express");
 const router = express.Router();
 
+// Import the profile controller
+const profileController = require("../../controllers/profileController");
+
+// Define a simple fallback handler for undefined routes
+const notImplemented = (req, res) => {
+  res.status(501).json({ error: "This endpoint is not yet implemented" });
+};
+
 // Get all profile data in one request
-router.get("/", getUserProfile);
+router.get("/", profileController.getUserProfile || notImplemented);
 
 // Individual endpoints for specific sections
-router.get("/deposits", getUserDeposits);
-router.get("/yield", getYieldBreakdown);
-router.get("/loans", getActiveLoans);
-router.get("/transactions", getTransactionHistory);
+router.get("/deposits", profileController.getUserDeposits || notImplemented);
+router.get("/yield", profileController.getYieldBreakdown || notImplemented);
+router.get("/loans", profileController.getActiveLoans || notImplemented);
+router.get("/transactions", profileController.getTransactionHistory || notImplemented);
 
-// New count-specific endpoints
-router.get("/lstbtc-count", getLstBtcDepositCount);
-router.post("/lstbtc-count", updateLstBtcDepositCount);
-router.get("/active-loans-count", getActiveLoansCount);
-router.get("/deposit-assets", getDepositAssets);
-router.get("/rebtc-rewards", getRebtcRewards);
+// Count-specific endpoints
+router.get("/lstbtc-count", profileController.getLstBtcDepositCount || notImplemented);
+router.post("/lstbtc-count", profileController.updateLstBtcDepositCount || notImplemented);
+router.get("/active-loans-count", profileController.getActiveLoansCount || notImplemented);
+router.get("/deposit-assets", profileController.getDepositAssets || notImplemented);
+router.get("/rebtc-rewards", profileController.getRebtcRewards || notImplemented);
 
-export default router;
+module.exports = router;

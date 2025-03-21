@@ -1,23 +1,26 @@
-// controllers/depositController.js
-import { ethers } from "ethers";
-import db from "../models";
-import { getProvider } from "../utils/web3";
-import { incrementLstBtcDepositCount } from "./profileController";
+const { ethers } = require("ethers");
+const {
+  Deposit,
+  Transaction,
+  UserStats,
+  ApyRate,
+} = require("../models/mongoose");
+const { getProvider } = require("../utils/web3");
 
 // Import contract addresses and ABIs
-import {
+const {
   BTC_TOKEN_ADDRESS,
   LSTBTC_TOKEN_ADDRESS,
   DEPOSIT_CONTRACT_ADDRESS,
   TOKEN_ABI,
   DEPOSIT_CONTRACT_ABI,
-} from "../constants/contracts";
+} = require("../constants/contracts");
 
 // Process a new deposit
-export const processDeposit = async (req, res) => {
+exports.processDeposit = async (req, res) => {
   try {
     const { address } = req.user;
-    const { amount, asset, txHash } = req.body;
+    const { amount, asset, txHash, apy } = req.body;
 
     if (!amount || !asset || !txHash) {
       return res.status(400).json({ error: "Missing required fields" });
@@ -32,38 +35,44 @@ export const processDeposit = async (req, res) => {
     }
 
     // Create deposit record
-    const deposit = await db.Deposit.create({
+    const deposit = await Deposit.create({
       userAddress: address,
       amount: parseFloat(amount),
       asset,
       txHash,
       status: "Completed",
+      apy: apy || null,
     });
 
-    // If this is an lstBTC deposit, increment the deposit count
-    if (asset.toLowerCase() === "rebtc" || asset.toLowerCase() === "lstbtc") {
-      await incrementLstBtcDepositCount(address, 1);
+    // Create transaction record
+    await Transaction.create({
+      userAddress: address,
+      txHash,
+      type: "Deposit",
+      amount: parseFloat(amount),
+      asset,
+      status: "Completed",
+    });
 
-      // Update user deposit stats
-      const [userStats] = await db.UserDepositStats.findOrCreate({
-        where: { userAddress: address },
-        defaults: { userAddress: address },
-      });
-
-      userStats.totalLstBtcDeposited += parseFloat(amount);
-      userStats.lastDepositDate = new Date();
-      await userStats.save();
-    } else if (asset.toLowerCase() === "btc") {
-      // Update BTC deposit stats
-      const [userStats] = await db.UserDepositStats.findOrCreate({
-        where: { userAddress: address },
-        defaults: { userAddress: address },
-      });
-
-      userStats.totalBtcDeposited += parseFloat(amount);
-      userStats.lastDepositDate = new Date();
-      await userStats.save();
-    }
+    // Update user stats
+    await UserStats.findOneAndUpdate(
+      { userAddress: address },
+      {
+        $inc: {
+          ...(asset.toLowerCase() === "rebtc" ||
+          asset.toLowerCase() === "lstbtc"
+            ? {
+                lstBtcDepositCount: 1,
+                totalLstBtcDeposited: parseFloat(amount),
+              }
+            : asset.toLowerCase() === "btc"
+            ? { totalBtcDeposited: parseFloat(amount) }
+            : {}),
+        },
+        $set: { lastDepositDate: new Date() },
+      },
+      { new: true, upsert: true }
+    );
 
     res.status(201).json({
       success: true,
@@ -77,16 +86,32 @@ export const processDeposit = async (req, res) => {
 };
 
 // Get user deposits
-export const getUserDeposits = async (req, res) => {
+exports.getUserDeposits = async (req, res) => {
   try {
     const { address } = req.user;
+    const { limit = 10, offset = 0, asset } = req.query;
 
-    const deposits = await db.Deposit.findAll({
-      where: { userAddress: address },
-      order: [["createdAt", "DESC"]],
+    // Build query conditions
+    const query = { userAddress: address };
+
+    if (asset) {
+      query.asset = asset;
+    }
+
+    const deposits = await Deposit.find(query)
+      .sort({ createdAt: -1 })
+      .skip(parseInt(offset))
+      .limit(parseInt(limit));
+
+    // Get total count for pagination
+    const totalCount = await Deposit.countDocuments(query);
+
+    res.status(200).json({
+      deposits,
+      totalCount,
+      page: Math.floor(parseInt(offset) / parseInt(limit)) + 1,
+      totalPages: Math.ceil(totalCount / parseInt(limit)),
     });
-
-    res.status(200).json({ deposits });
   } catch (error) {
     console.error("Error fetching deposits:", error);
     res.status(500).json({ error: "Failed to fetch deposits" });
@@ -94,14 +119,49 @@ export const getUserDeposits = async (req, res) => {
 };
 
 // Get deposit stats
-export const getDepositStats = async (req, res) => {
+exports.getDepositStats = async (req, res) => {
   try {
     const { address } = req.user;
 
     // Get user deposit stats
-    const [userStats] = await db.UserDepositStats.findOrCreate({
-      where: { userAddress: address },
-      defaults: { userAddress: address },
+    const userStats = (await UserStats.findOne({ userAddress: address })) || {
+      totalBtcDeposited: 0,
+      totalLstBtcDeposited: 0,
+      lstBtcDepositCount: 0,
+      lastDepositDate: null,
+    };
+
+    // Get deposit distribution by asset
+    const assetDistribution = await Deposit.aggregate([
+      { $match: { userAddress: address } },
+      {
+        $group: {
+          _id: "$asset",
+          count: { $sum: 1 },
+          totalAmount: { $sum: "$amount" },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          asset: "$_id",
+          count: 1,
+          totalAmount: 1,
+        },
+      },
+    ]);
+
+    // Get current APY rates
+    const apyRates = await ApyRate.find();
+
+    // Map asset distribution with current APY
+    const assetsWithApy = assetDistribution.map((asset) => {
+      const currentApy =
+        apyRates.find((rate) => rate.asset === asset.asset)?.rate || 0;
+      return {
+        ...asset,
+        currentApy,
+      };
     });
 
     // Get on-chain balances
@@ -120,10 +180,12 @@ export const getDepositStats = async (req, res) => {
     const [btcBalance, lstBtcBalance] = await Promise.all([
       btcTokenContract
         .balanceOf(address)
-        .then((bal) => ethers.utils.formatEther(bal)),
+        .then((bal) => ethers.utils.formatUnits(bal, 8))
+        .catch(() => "0"),
       lstBtcTokenContract
         .balanceOf(address)
-        .then((bal) => ethers.utils.formatEther(bal)),
+        .then((bal) => ethers.utils.formatUnits(bal, 8))
+        .catch(() => "0"),
     ]);
 
     res.status(200).json({
@@ -137,6 +199,7 @@ export const getDepositStats = async (req, res) => {
         lstBtcDepositCount: userStats.lstBtcDepositCount,
         lastDepositDate: userStats.lastDepositDate,
       },
+      assetDistribution: assetsWithApy,
     });
   } catch (error) {
     console.error("Error fetching deposit stats:", error);

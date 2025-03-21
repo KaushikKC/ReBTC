@@ -13,7 +13,7 @@ const config = {
 
   // API settings
   api: {
-    port: process.env.PORT || 3000,
+    port: process.env.PORT || 3005,
     prefix: "/api/v1",
   },
 

@@ -68,6 +68,46 @@ function Deposit() {
     }
   }, [address]);
 
+  // Add this constant for profile transactions storage
+  const PROFILE_TRANSACTIONS_KEY = "transactions";
+
+  // Helper function to save transaction to profile storage
+  const saveTransactionToProfile = (transaction) => {
+    try {
+      // Get existing transactions from local storage
+      const existingTransactions = JSON.parse(
+        localStorage.getItem(PROFILE_TRANSACTIONS_KEY) || "[]"
+      );
+
+      // Check if transaction with same hash already exists
+      const existingIndex = existingTransactions.findIndex(
+        (tx) => tx.hash === transaction.hash
+      );
+
+      if (existingIndex >= 0) {
+        // Update existing transaction
+        existingTransactions[existingIndex] = {
+          ...existingTransactions[existingIndex],
+          ...transaction,
+        };
+      } else {
+        // Add new transaction
+        existingTransactions.push(transaction);
+      }
+
+      // Save back to local storage
+      localStorage.setItem(
+        PROFILE_TRANSACTIONS_KEY,
+        JSON.stringify(existingTransactions)
+      );
+      console.log("Saved transaction to profile storage");
+      return true;
+    } catch (error) {
+      console.error("Error saving transaction to profile storage:", error);
+      return false;
+    }
+  };
+
   // Fetch user balances for all tokens
   const fetchUserBalances = async () => {
     try {
@@ -189,10 +229,38 @@ function Deposit() {
       }
 
       toast.loading(`Depositing ${selectedCrypto.name}...`);
-      await depositTx.wait();
+      const receipt = await depositTx.wait();
       toast.dismiss();
 
       toast.success(`Successfully deposited ${amount} ${selectedCrypto.name}`);
+
+      // Save transaction to profile storage
+      const profileTransaction = {
+        hash: receipt.transactionHash,
+        reBtcUsed: 0, // Not using ReBTC for deposits
+        stablecoins: parseFloat(amount),
+        currency: selectedCrypto.name,
+        status: "Completed",
+        type: "Deposit",
+        description: `Deposited ${amount} ${selectedCrypto.name}`,
+        userAddress: address,
+        timestamp: new Date().toISOString(),
+      };
+
+      saveTransactionToProfile(profileTransaction);
+
+      // Also try to use the global addTransaction function if available
+      if (
+        typeof window !== "undefined" &&
+        typeof window.addTransaction === "function"
+      ) {
+        try {
+          window.addTransaction(profileTransaction);
+          console.log("Used global addTransaction function");
+        } catch (error) {
+          console.error("Error using global addTransaction function:", error);
+        }
+      }
 
       // Refresh balances and TVL
       fetchUserBalances();

@@ -26,6 +26,46 @@ const TRANSACTION_HISTORY_TIMESTAMP_KEY =
   "flashLoanTransactionHistoryTimestamp";
 const CACHE_EXPIRATION_TIME = 30 * 60 * 1000; // 30 minutes in milliseconds
 
+// Profile page transaction storage key
+const PROFILE_TRANSACTIONS_KEY = "transactions";
+
+// Helper function to save transaction to profile storage
+const saveTransactionToProfile = (transaction) => {
+  try {
+    // Get existing transactions from local storage
+    const existingTransactions = JSON.parse(
+      localStorage.getItem(PROFILE_TRANSACTIONS_KEY) || "[]"
+    );
+
+    // Check if transaction with same hash already exists
+    const existingIndex = existingTransactions.findIndex(
+      (tx) => tx.hash === transaction.hash
+    );
+
+    if (existingIndex >= 0) {
+      // Update existing transaction
+      existingTransactions[existingIndex] = {
+        ...existingTransactions[existingIndex],
+        ...transaction,
+      };
+    } else {
+      // Add new transaction
+      existingTransactions.push(transaction);
+    }
+
+    // Save back to local storage
+    localStorage.setItem(
+      PROFILE_TRANSACTIONS_KEY,
+      JSON.stringify(existingTransactions)
+    );
+    console.log("Saved transaction to profile storage");
+    return true;
+  } catch (error) {
+    console.error("Error saving transaction to profile storage:", error);
+    return false;
+  }
+};
+
 const FlashLoan = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [lstBTCAmount, setLstBTCAmount] = useState("");
@@ -337,6 +377,34 @@ const FlashLoan = () => {
       };
 
       setRecentTransactions([newTransaction, ...recentTransactions]);
+
+      // Save transaction to profile storage
+      const profileTransaction = {
+        hash: receipt.transactionHash,
+        reBtcUsed: parseFloat(lstBTCAmount),
+        stablecoins: parseFloat(calculateReceiveAmount()),
+        currency: selectedStablecoin,
+        status: "Completed",
+        type: "Flash Loan",
+        description: `Exchanged ${lstBTCAmount} lstBTC for ${calculateReceiveAmount()} ${selectedStablecoin}`,
+        userAddress: address,
+        timestamp: new Date().toISOString(),
+      };
+
+      saveTransactionToProfile(profileTransaction);
+
+      // Also try to use the global addTransaction function if available
+      if (
+        typeof window !== "undefined" &&
+        typeof window.addTransaction === "function"
+      ) {
+        try {
+          window.addTransaction(profileTransaction);
+          console.log("Used global addTransaction function");
+        } catch (error) {
+          console.error("Error using global addTransaction function:", error);
+        }
+      }
 
       // Refresh contract data
       const liquidityWei =
@@ -661,6 +729,48 @@ const FlashLoan = () => {
                               target="_blank"
                               rel="noopener noreferrer"
                               className="text-blue-400 hover:underline"
+                              onClick={() => {
+                                // Save this transaction to profile storage when clicked
+                                if (address) {
+                                  const profileTransaction = {
+                                    hash: tx.fullTxHash,
+                                    reBtcUsed: tx.lstBTCUsed,
+                                    stablecoins: tx.stablecoinsReceived,
+                                    currency: tx.currency,
+                                    status:
+                                      tx.status === "completed"
+                                        ? "Completed"
+                                        : tx.status,
+                                    type: "Flash Loan",
+                                    description: `Exchanged ${tx.lstBTCUsed} lstBTC for ${tx.stablecoinsReceived} ${tx.currency}`,
+                                    userAddress: address,
+                                    timestamp: new Date(
+                                      tx.timestamp
+                                    ).toISOString(),
+                                  };
+
+                                  saveTransactionToProfile(profileTransaction);
+
+                                  // Also try to use the global addTransaction function if available
+                                  if (
+                                    typeof window !== "undefined" &&
+                                    typeof window.addTransaction === "function"
+                                  ) {
+                                    try {
+                                      window.addTransaction(profileTransaction);
+                                    } catch (error) {
+                                      console.error(
+                                        "Error using global addTransaction function:",
+                                        error
+                                      );
+                                    }
+                                  }
+
+                                  toast.success(
+                                    "Transaction added to your profile"
+                                  );
+                                }
+                              }}
                             >
                               {tx.txHash}
                             </a>

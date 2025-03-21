@@ -1,7 +1,7 @@
 // utils/web3.js
-import { ethers } from "ethers";
+const { ethers } = require("ethers");
 
-export const getProvider = () => {
+const getProvider = () => {
   // Use environment variables to determine which provider to use
   if (process.env.NODE_ENV === "production") {
     return new ethers.providers.JsonRpcProvider(process.env.MAINNET_RPC_URL);
@@ -10,28 +10,37 @@ export const getProvider = () => {
   }
 };
 
-export const getSigner = () => {
+const getSigner = () => {
   const provider = getProvider();
   // Use private key from environment variables
   return new ethers.Wallet(process.env.PRIVATE_KEY, provider);
 };
 
 // Helper function to convert wei to ether
-export const weiToEther = (wei) => {
+const weiToEther = (wei) => {
   return ethers.utils.formatEther(wei);
 };
 
 // Helper function to convert ether to wei
-export const etherToWei = (ether) => {
+const etherToWei = (ether) => {
   return ethers.utils.parseEther(ether);
 };
 
 // Helper function for USDT/USDC (6 decimal places)
-export const formatStablecoin = (amount) => {
+const formatStablecoin = (amount) => {
   return ethers.utils.formatUnits(amount, 6);
 };
 
 // Helper function for USDT/USDC (6 decimal places)
-export const parseStablecoin = (amount) => {
+const parseStablecoin = (amount) => {
   return ethers.utils.parseUnits(amount.toString(), 6);
+};
+
+module.exports = {
+  getProvider,
+  getSigner,
+  weiToEther,
+  etherToWei,
+  formatStablecoin,
+  parseStablecoin,
 };

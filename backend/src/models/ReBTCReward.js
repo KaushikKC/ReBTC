@@ -1,7 +1,7 @@
 const mongoose = require("mongoose");
 const Schema = mongoose.Schema;
 
-const TransactionSchema = new Schema({
+const RebtcRewardSchema = new Schema({
   userAddress: {
     type: String,
     required: true,
@@ -9,32 +9,16 @@ const TransactionSchema = new Schema({
     trim: true,
     index: true,
   },
-  txHash: {
-    type: String,
-    required: true,
-    unique: true,
-  },
-  type: {
-    type: String,
-    required: true,
-    index: true,
-  },
   amount: {
     type: Number,
     required: true,
   },
-  asset: {
+  source: {
     type: String,
-    required: true,
-    index: true,
+    default: "BTC Staking",
   },
-  status: {
+  txHash: {
     type: String,
-    enum: ["Pending", "Completed", "Failed"],
-    default: "Pending",
-  },
-  details: {
-    type: Object,
   },
   createdAt: {
     type: Date,
@@ -47,12 +31,12 @@ const TransactionSchema = new Schema({
 });
 
 // Update the updatedAt field on save
-TransactionSchema.pre("save", function (next) {
+RebtcRewardSchema.pre("save", function (next) {
   this.updatedAt = Date.now();
   next();
 });
 
 // Create compound index for faster queries
-TransactionSchema.index({ userAddress: 1, createdAt: -1 });
+RebtcRewardSchema.index({ userAddress: 1, createdAt: -1 });
 
-module.exports = mongoose.model("Transaction", TransactionSchema);
+module.exports = mongoose.model("RebtcReward", RebtcRewardSchema);

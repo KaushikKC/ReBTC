@@ -1,17 +1,149 @@
 // controllers/profileController.js
-import { ethers } from "ethers";
-import {
+const { ethers } = require("ethers");
+const mongoose = require("mongoose");
+const {
   BTC_TOKEN_ADDRESS,
   LSTBTC_TOKEN_ADDRESS,
   LOAN_CONTRACT_ADDRESS,
   TOKEN_ABI,
   LOAN_CONTRACT_ABI,
-} from "../constants/contracts";
-import db from "../models";
-import { getProvider } from "../utils/web3";
+} = require("../constants/contracts");
+const { getProvider } = require("../utils/web3");
+
+// Define UserDepositStats model directly if import fails
+let UserDepositStats;
+let YieldHistory;
+let Transaction;
+
+try {
+  // Try to import from mongoose models
+  const mongooseModels = require("../models/mongoose");
+  UserDepositStats = mongooseModels.UserDepositStats;
+  YieldHistory = mongooseModels.YieldHistory;
+  Transaction = mongooseModels.Transaction;
+
+  console.log("Successfully imported mongoose models");
+} catch (error) {
+  console.error(
+    "Error importing mongoose models, defining them directly:",
+    error
+  );
+
+  // Define models directly if import fails
+  const UserDepositStatsSchema = new mongoose.Schema(
+    {
+      userAddress: {
+        type: String,
+        required: true,
+        unique: true,
+        lowercase: true,
+        trim: true,
+        index: true,
+      },
+      lstBtcDepositCount: {
+        type: Number,
+        required: true,
+        default: 0,
+      },
+      totalBtcDeposited: {
+        type: Number,
+        required: true,
+        default: 0,
+      },
+      totalLstBtcDeposited: {
+        type: Number,
+        required: true,
+        default: 0,
+      },
+      lastDepositDate: {
+        type: Date,
+        default: null,
+      },
+    },
+    {
+      timestamps: true,
+    }
+  );
+
+  const YieldHistorySchema = new mongoose.Schema(
+    {
+      userAddress: {
+        type: String,
+        required: true,
+        lowercase: true,
+        trim: true,
+        index: true,
+      },
+      type: {
+        type: String,
+        required: true,
+      },
+      amount: {
+        type: Number,
+        required: true,
+      },
+      timestamp: {
+        type: Date,
+        default: Date.now,
+      },
+    },
+    {
+      timestamps: true,
+    }
+  );
+
+  const TransactionSchema = new mongoose.Schema(
+    {
+      userAddress: {
+        type: String,
+        required: true,
+        lowercase: true,
+        trim: true,
+        index: true,
+      },
+      txHash: {
+        type: String,
+        required: true,
+      },
+      type: {
+        type: String,
+        required: true,
+      },
+      amount: {
+        type: Number,
+        required: true,
+      },
+      asset: {
+        type: String,
+        required: true,
+      },
+      status: {
+        type: String,
+        default: "Completed",
+      },
+      reBtcAmount: Number,
+      stablecoinAmount: Number,
+      stablecoinType: String,
+    },
+    {
+      timestamps: true,
+    }
+  );
+
+  // Create models if they don't exist
+  UserDepositStats =
+    mongoose.models.UserDepositStats ||
+    mongoose.model("UserDepositStats", UserDepositStatsSchema);
+  YieldHistory =
+    mongoose.models.YieldHistory ||
+    mongoose.model("YieldHistory", YieldHistorySchema);
+  Transaction =
+    mongoose.models.Transaction ||
+    mongoose.model("Transaction", TransactionSchema);
+}
 
 // Get user profile complete data
-export const getUserProfile = async (req, res) => {
+exports.getUserProfile = async (req, res) => {
   try {
     const { address } = req.user;
 
@@ -39,7 +171,7 @@ export const getUserProfile = async (req, res) => {
 };
 
 // Get user deposits only
-export const getUserDeposits = async (req, res) => {
+exports.getUserDeposits = async (req, res) => {
   try {
     const { address } = req.user;
     const deposits = await getUserDepositsData(address);
@@ -51,7 +183,7 @@ export const getUserDeposits = async (req, res) => {
 };
 
 // Get yield breakdown only
-export const getYieldBreakdown = async (req, res) => {
+exports.getYieldBreakdown = async (req, res) => {
   try {
     const { address } = req.user;
     const yieldBreakdown = await getUserYieldData(address);
@@ -63,7 +195,7 @@ export const getYieldBreakdown = async (req, res) => {
 };
 
 // Get active loans only
-export const getActiveLoans = async (req, res) => {
+exports.getActiveLoans = async (req, res) => {
   try {
     const { address } = req.user;
     const activeLoans = await getUserLoansData(address);
@@ -75,7 +207,7 @@ export const getActiveLoans = async (req, res) => {
 };
 
 // Get transaction history only
-export const getTransactionHistory = async (req, res) => {
+exports.getTransactionHistory = async (req, res) => {
   try {
     const { address } = req.user;
     const transactions = await getUserTransactionsData(address);
@@ -87,9 +219,14 @@ export const getTransactionHistory = async (req, res) => {
 };
 
 // Get lstBTC deposit count
-export const getLstBtcDepositCount = async (req, res) => {
+exports.getLstBtcDepositCount = async (req, res) => {
   try {
-    const { address } = req.user;
+    const { address } = req.user || req.body;
+
+    if (!address) {
+      return res.status(400).json({ error: "Address is required" });
+    }
+
     const count = await getUserLstBtcDepositCount(address);
     res.status(200).json({ count });
   } catch (error) {
@@ -99,18 +236,28 @@ export const getLstBtcDepositCount = async (req, res) => {
 };
 
 // Update lstBTC deposit count
-export const updateLstBtcDepositCount = async (req, res) => {
+exports.updateLstBtcDepositCount = async (req, res) => {
   try {
-    const { address } = req.user;
-    const { amount } = req.body;
+    const { amount, address } = req.body;
 
     if (!amount || isNaN(parseFloat(amount))) {
       return res.status(400).json({ error: "Valid amount is required" });
     }
 
-    await incrementLstBtcDepositCount(address, parseFloat(amount));
+    console.log(
+      "Incrementing lstBTC deposit count for address:",
+      address,
+      "by amount:",
+      amount
+    );
 
-    const newCount = await getUserLstBtcDepositCount(address);
+    const newCount = await incrementLstBtcDepositCount(
+      address,
+      parseFloat(amount)
+    );
+
+    console.log("New count:", newCount);
+
     res.status(200).json({ success: true, count: newCount });
   } catch (error) {
     console.error("Error updating lstBTC deposit count:", error);
@@ -138,39 +285,63 @@ async function getUserStats(address) {
     provider
   );
 
-  // Get on-chain data
-  const [
-    btcBalance,
-    lstBtcBalance,
-    totalEarnings,
-    activeLoanAmount,
-    insuranceStatus,
-    lstBtcDepositCount,
-  ] = await Promise.all([
-    btcTokenContract
-      .balanceOf(address)
-      .then((bal) => ethers.utils.formatEther(bal)),
-    lstBtcTokenContract
-      .balanceOf(address)
-      .then((bal) => ethers.utils.formatEther(bal)),
-    db.YieldHistory.sum("amount", { where: { userAddress: address } }),
-    loanContract
-      .getUserActiveLoanAmount(address)
-      .then((amount) => ethers.utils.formatUnits(amount, 6)),
-    loanContract.hasInsurance(address),
-    getUserLstBtcDepositCount(address),
-  ]);
+  try {
+    // Get on-chain data
+    const [
+      btcBalance,
+      lstBtcBalance,
+      activeLoanAmount,
+      insuranceStatus,
+      lstBtcDepositCount,
+    ] = await Promise.all([
+      btcTokenContract
+        .balanceOf(address)
+        .then((bal) => ethers.utils.formatEther(bal))
+        .catch(() => "0"),
+      lstBtcTokenContract
+        .balanceOf(address)
+        .then((bal) => ethers.utils.formatEther(bal))
+        .catch(() => "0"),
+      loanContract
+        .getUserActiveLoanAmount(address)
+        .then((amount) => ethers.utils.formatUnits(amount, 6))
+        .catch(() => "0"),
+      loanContract.hasInsurance(address).catch(() => false),
+      getUserLstBtcDepositCount(address),
+    ]);
 
-  // Calculate total deposited (BTC + LstBTC)
-  const totalDeposited = parseFloat(btcBalance) + parseFloat(lstBtcBalance);
+    // Get total earnings from MongoDB
+    let totalEarnings = 0;
+    try {
+      const yieldData = await YieldHistory.aggregate([
+        { $match: { userAddress: address.toLowerCase() } },
+        { $group: { _id: null, total: { $sum: "$amount" } } },
+      ]);
+      totalEarnings = yieldData.length > 0 ? yieldData[0].total : 0;
+    } catch (error) {
+      console.error("Error getting yield data:", error);
+    }
 
-  return {
-    totalDeposited: parseFloat(totalDeposited.toFixed(8)),
-    totalEarnings: parseFloat(totalEarnings.toFixed(8)) || 0,
-    activeLoans: parseFloat(activeLoanAmount),
-    insuranceStatus,
-    lstBtcDepositCount,
-  };
+    // Calculate total deposited (BTC + LstBTC)
+    const totalDeposited = parseFloat(btcBalance) + parseFloat(lstBtcBalance);
+
+    return {
+      totalDeposited: parseFloat(totalDeposited.toFixed(8)),
+      totalEarnings: parseFloat(totalEarnings.toFixed(8)) || 0,
+      activeLoans: parseFloat(activeLoanAmount),
+      insuranceStatus,
+      lstBtcDepositCount,
+    };
+  } catch (error) {
+    console.error("Error in getUserStats:", error);
+    return {
+      totalDeposited: 0,
+      totalEarnings: 0,
+      activeLoans: 0,
+      insuranceStatus: false,
+      lstBtcDepositCount: 0,
+    };
+  }
 }
 
 async function getUserDepositsData(address) {
@@ -187,149 +358,219 @@ async function getUserDepositsData(address) {
     provider
   );
 
-  // Get APY rates from database or other source
-  const apyRates = await db.ApyRates.findAll();
-  const btcApy = apyRates.find((r) => r.asset === "BTC")?.rate || 4.5;
-  const reBtcApy = apyRates.find((r) => r.asset === "ReBTC")?.rate || 7.2;
+  try {
+    // Get APY rates from database or other source
+    // For MongoDB, we need to adjust this query
+    const apyRates = [
+      { asset: "BTC", rate: 4.5 },
+      { asset: "ReBTC", rate: 7.2 },
+    ]; // Default values
 
-  // Get on-chain data
-  const [btcBalance, lstBtcBalance, lstBtcDepositCount] = await Promise.all([
-    btcTokenContract
-      .balanceOf(address)
-      .then((bal) => ethers.utils.formatEther(bal)),
-    lstBtcTokenContract
-      .balanceOf(address)
-      .then((bal) => ethers.utils.formatEther(bal)),
-    getUserLstBtcDepositCount(address),
-  ]);
+    const btcApy = 4.5; // Default value
+    const reBtcApy = 7.2; // Default value
 
-  return [
-    {
-      asset: "BTC",
-      amount: parseFloat(btcBalance),
-      apy: btcApy,
-      status: parseFloat(btcBalance) > 0 ? "Active" : "Inactive",
-    },
-    {
-      asset: "ReBTC",
-      amount: parseFloat(lstBtcBalance),
-      apy: reBtcApy,
-      status: parseFloat(lstBtcBalance) > 0 ? "Active" : "Inactive",
-      depositCount: lstBtcDepositCount,
-    },
-  ];
+    // Get on-chain data
+    const [btcBalance, lstBtcBalance, lstBtcDepositCount] = await Promise.all([
+      btcTokenContract
+        .balanceOf(address)
+        .then((bal) => ethers.utils.formatEther(bal))
+        .catch(() => "0"),
+      lstBtcTokenContract
+        .balanceOf(address)
+        .then((bal) => ethers.utils.formatEther(bal))
+        .catch(() => "0"),
+      getUserLstBtcDepositCount(address),
+    ]);
+
+    return [
+      {
+        asset: "BTC",
+        amount: parseFloat(btcBalance),
+        apy: btcApy,
+        status: parseFloat(btcBalance) > 0 ? "Active" : "Inactive",
+      },
+      {
+        asset: "ReBTC",
+        amount: parseFloat(lstBtcBalance),
+        apy: reBtcApy,
+        status: parseFloat(lstBtcBalance) > 0 ? "Active" : "Inactive",
+        depositCount: lstBtcDepositCount,
+      },
+    ];
+  } catch (error) {
+    console.error("Error in getUserDepositsData:", error);
+    return [];
+  }
 }
 
 async function getUserYieldData(address) {
-  // Get yield data from database
-  const yieldData = await db.YieldHistory.findAll({
-    attributes: [
-      "type",
-      [db.sequelize.fn("sum", db.sequelize.col("amount")), "totalAmount"],
-    ],
-    where: { userAddress: address },
-    group: ["type"],
-    raw: true,
-  });
+  try {
+    // Get yield data from MongoDB
+    if (!YieldHistory) {
+      console.error("YieldHistory model is not defined");
+      return [];
+    }
 
-  // Map to expected format
-  const yieldTypes = [
-    "Staking Yield",
-    "Lending Yield",
-    "Restaking Rewards",
-    "Borrowing Optimization",
-  ];
+    const yieldData = await YieldHistory.aggregate([
+      { $match: { userAddress: address.toLowerCase() } },
+      { $group: { _id: "$type", totalAmount: { $sum: "$amount" } } },
+    ]);
 
-  return yieldTypes.map((type) => {
-    const foundData = yieldData.find((d) => d.type === type);
-    return {
-      type,
-      amount: foundData ? parseFloat(foundData.totalAmount) : 0,
-    };
-  });
+    // Map to expected format
+    const yieldTypes = [
+      "Staking Yield",
+      "Lending Yield",
+      "Restaking Rewards",
+      "Borrowing Optimization",
+    ];
+
+    return yieldTypes.map((type) => {
+      const foundData = yieldData.find((d) => d._id === type);
+      return {
+        type,
+        amount: foundData ? parseFloat(foundData.totalAmount) : 0,
+      };
+    });
+  } catch (error) {
+    console.error("Error in getUserYieldData:", error);
+    return [];
+  }
 }
 
 async function getUserLoansData(address) {
-  // Initialize provider and contracts
-  const provider = getProvider();
-  const loanContract = new ethers.Contract(
-    LOAN_CONTRACT_ADDRESS,
-    LOAN_CONTRACT_ABI,
-    provider
-  );
+  try {
+    // Initialize provider and contracts
+    const provider = getProvider();
+    const loanContract = new ethers.Contract(
+      LOAN_CONTRACT_ADDRESS,
+      LOAN_CONTRACT_ABI,
+      provider
+    );
 
-  // Get loan IDs for the user
-  const loanIds = await loanContract.getUserLoans(address);
+    // Get loan IDs for the user
+    const loanIds = await loanContract.getUserLoans(address);
 
-  // Get loan details for each ID
-  const loanPromises = loanIds.map(async (id) => {
-    const loanData = await loanContract.getLoan(id);
-    const dueDate = new Date(loanData.dueDate.toNumber() * 1000);
-    const dueMonth = dueDate.toLocaleString("default", { month: "short" });
-    const dueDay = dueDate.getDate();
+    // Get loan details for each ID
+    const loanPromises = loanIds.map(async (id) => {
+      try {
+        const loanData = await loanContract.getLoan(id);
+        const dueDate = new Date(loanData.dueDate.toNumber() * 1000);
+        const dueMonth = dueDate.toLocaleString("default", { month: "short" });
+        const dueDay = dueDate.getDate();
 
-    return {
-      id: `#${id.toString().padStart(3, "0")}`,
-      amount: parseFloat(ethers.utils.formatUnits(loanData.amount, 6)),
-      currency: loanData.currency,
-      rate: parseFloat(ethers.utils.formatUnits(loanData.interestRate, 2)),
-      dueDate: `${dueDay}-${dueMonth}`,
-      status: Date.now() < dueDate.getTime() ? "Active" : "Overdue",
-      collateral: parseFloat(
-        ethers.utils.formatEther(loanData.collateralAmount)
-      ),
-    };
-  });
+        return {
+          id: `#${id.toString().padStart(3, "0")}`,
+          amount: parseFloat(ethers.utils.formatUnits(loanData.amount, 6)),
+          currency: loanData.currency,
+          rate: parseFloat(ethers.utils.formatUnits(loanData.interestRate, 2)),
+          dueDate: `${dueDay}-${dueMonth}`,
+          status: Date.now() < dueDate.getTime() ? "Active" : "Overdue",
+          collateral: parseFloat(
+            ethers.utils.formatEther(loanData.collateralAmount)
+          ),
+        };
+      } catch (error) {
+        console.error(`Error fetching loan ${id}:`, error);
+        return null;
+      }
+    });
 
-  return await Promise.all(loanPromises);
+    const loans = await Promise.all(loanPromises);
+    return loans.filter((loan) => loan !== null);
+  } catch (error) {
+    console.error("Error in getUserLoansData:", error);
+    return [];
+  }
 }
 
 async function getUserTransactionsData(address) {
-  // Get transaction data from database
-  const transactions = await db.Transaction.findAll({
-    where: { userAddress: address },
-    order: [["createdAt", "DESC"]],
-    limit: 10,
-  });
+  try {
+    // Get transaction data from MongoDB
+    if (!Transaction) {
+      console.error("Transaction model is not defined");
+      return [];
+    }
 
-  // Map to expected format
-  return transactions.map((tx) => ({
-    hash: tx.txHash,
-    reBtcUsed: parseFloat(tx.reBtcAmount),
-    stablecoins: parseFloat(tx.stablecoinAmount),
-    currency: tx.stablecoinType,
-    status: tx.status,
-  }));
+    const transactions = await Transaction.find({
+      userAddress: address.toLowerCase(),
+    })
+      .sort({ createdAt: -1 })
+      .limit(10);
+
+    // Map to expected format
+    return transactions.map((tx) => ({
+      hash: tx.txHash,
+      reBtcUsed: parseFloat(tx.reBtcAmount || 0),
+      stablecoins: parseFloat(tx.stablecoinAmount || 0),
+      currency: tx.stablecoinType || "USDT",
+      status: tx.status || "Completed",
+    }));
+  } catch (error) {
+    console.error("Error in getUserTransactionsData:", error);
+    return [];
+  }
 }
 
-// Helper function to get lstBTC deposit count
+// Helper function to get lstBTC deposit count - FIXED FOR MONGODB
 async function getUserLstBtcDepositCount(address) {
-  // Find or create user deposit stats
-  const [userDepositStats] = await db.UserDepositStats.findOrCreate({
-    where: { userAddress: address },
-    defaults: {
-      userAddress: address,
-      lstBtcDepositCount: 0,
-    },
-  });
+  try {
+    // Check if UserDepositStats model is defined
+    if (!UserDepositStats) {
+      console.error("UserDepositStats model is not defined");
+      return 0;
+    }
 
-  return userDepositStats.lstBtcDepositCount;
+    // Find user deposit stats in MongoDB
+    const userDepositStats = await UserDepositStats.findOne({
+      userAddress: address.toLowerCase(),
+    });
+
+    // If no stats found, return 0
+    if (!userDepositStats) {
+      return 0;
+    }
+
+    return userDepositStats.lstBtcDepositCount;
+  } catch (error) {
+    console.error("Error in getUserLstBtcDepositCount:", error);
+    return 0;
+  }
 }
 
-// Helper function to increment lstBTC deposit count
+// Helper function to increment lstBTC deposit count - FIXED FOR MONGODB
 async function incrementLstBtcDepositCount(address, amount = 1) {
-  // Find or create user deposit stats
-  const [userDepositStats] = await db.UserDepositStats.findOrCreate({
-    where: { userAddress: address },
-    defaults: {
-      userAddress: address,
-      lstBtcDepositCount: 0,
-    },
-  });
+  try {
+    // Check if UserDepositStats model is defined
+    if (!UserDepositStats) {
+      console.error("UserDepositStats model is not defined");
+      return 0;
+    }
 
-  // Increment the count
-  userDepositStats.lstBtcDepositCount += amount;
-  await userDepositStats.save();
+    console.log("UserDepositStats model:", UserDepositStats);
+    console.log("Mongoose connection state:", mongoose.connection.readyState);
 
-  return userDepositStats.lstBtcDepositCount;
+    // Find and update user deposit stats in MongoDB
+    // Use findOneAndUpdate with upsert to create if it doesn't exist
+    const result = await UserDepositStats.findOneAndUpdate(
+      { userAddress: address.toLowerCase() },
+      {
+        $inc: { lstBtcDepositCount: amount },
+        $set: { lastDepositDate: new Date() },
+      },
+      {
+        new: true, // Return the updated document
+        upsert: true, // Create if it doesn't exist
+      }
+    );
+
+    console.log("Updated document:", result);
+
+    return result ? result.lstBtcDepositCount : 0;
+  } catch (error) {
+    console.error("Error in incrementLstBtcDepositCount:", error);
+    return 0;
+  }
 }
+
+// Export the incrementLstBtcDepositCount function
+exports.incrementLstBtcDepositCount = incrementLstBtcDepositCount;
