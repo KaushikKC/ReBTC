@@ -40,6 +40,7 @@ export default function AIAgentDashboard() {
   const [selectedAgent, setSelectedAgent] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [stoppingAgent, setStoppingAgent] = useState(false);
   const [analysisResult, setAnalysisResult] = useState(null);
 
   // Mock data for demonstration
@@ -51,16 +52,8 @@ export default function AIAgentDashboard() {
         name: "Price Monitor",
         type: "Price Monitoring",
         status: "active",
-        profit: "2.3%",
-        risk: "low",
-      },
-      {
-        id: 2,
-        name: "Yield Optimizer",
-        type: "Yield Optimization",
-        status: "active",
-        profit: "1.8%",
-        risk: "medium",
+        profit: "0.09",
+        risk: "High",
       },
     ]);
 
@@ -246,6 +239,46 @@ export default function AIAgentDashboard() {
       setLoading(false);
     }
   };
+
+  // New stopAgent function
+  const stopAgent = async () => {
+    setStoppingAgent(true);
+    try {
+      const response = await axios.post(
+        "http://localhost:4000/api/v1/usdt-agent/stop-monitoring"
+      );
+
+      console.log("Stop agent response:", response.data);
+
+      // Add a notification about the successful stop
+      setNotifications((prev) => [
+        {
+          id: Date.now(),
+          type: "success",
+          message: "Agent stopped",
+        },
+        ...prev,
+      ]);
+
+      // If we have analysis results, we might want to clear them when the agent is stopped
+      // Uncomment the next line if you want to clear the analysis results
+      // setAnalysisResult(null);
+    } catch (error) {
+      console.error("Error stopping agent:", error);
+      setNotifications((prev) => [
+        {
+          id: Date.now(),
+          type: "warning",
+          message:
+            "Failed to stop agent: " + (error.message || "Unknown error"),
+        },
+        ...prev,
+      ]);
+    } finally {
+      setStoppingAgent(false);
+    }
+  };
+
   return (
     <div className="relative z-10 font-['Quantify'] tracking-[1px] bg-[#0D1117] min-h-screen flex flex-col">
       <Navbar />
@@ -358,6 +391,17 @@ export default function AIAgentDashboard() {
                 className="bg-[#F7931A] hover:bg-[#F7931A]/80 text-white px-6 py-3 rounded-md font-medium transition-colors duration-300 font-['Quantify'] disabled:opacity-70"
               >
                 {loading ? "Starting..." : "Start Agent"}
+              </motion.button>
+
+              {/* New Stop Agent Button */}
+              <motion.button
+                whileHover={{ scale: stoppingAgent ? 1 : 1.05 }}
+                whileTap={{ scale: stoppingAgent ? 1 : 0.95 }}
+                onClick={stopAgent}
+                disabled={stoppingAgent}
+                className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-md font-medium transition-colors duration-300 font-['Quantify'] disabled:opacity-70"
+              >
+                {stoppingAgent ? "Stopping..." : "Stop Agent"}
               </motion.button>
             </div>
           </motion.div>
