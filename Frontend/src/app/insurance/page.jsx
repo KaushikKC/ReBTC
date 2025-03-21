@@ -47,6 +47,46 @@ export default function Insurance() {
   const { address } = useAccount();
   const { getContractInstance, provider } = useDataContext();
 
+  // Add this constant for profile transactions storage
+  const PROFILE_TRANSACTIONS_KEY = "transactions";
+
+  // Helper function to save transaction to profile storage
+  const saveTransactionToProfile = (transaction) => {
+    try {
+      // Get existing transactions from local storage
+      const existingTransactions = JSON.parse(
+        localStorage.getItem(PROFILE_TRANSACTIONS_KEY) || "[]"
+      );
+
+      // Check if transaction with same hash already exists
+      const existingIndex = existingTransactions.findIndex(
+        (tx) => tx.hash === transaction.hash
+      );
+
+      if (existingIndex >= 0) {
+        // Update existing transaction
+        existingTransactions[existingIndex] = {
+          ...existingTransactions[existingIndex],
+          ...transaction,
+        };
+      } else {
+        // Add new transaction
+        existingTransactions.push(transaction);
+      }
+
+      // Save back to local storage
+      localStorage.setItem(
+        PROFILE_TRANSACTIONS_KEY,
+        JSON.stringify(existingTransactions)
+      );
+      console.log("Saved transaction to profile storage");
+      return true;
+    } catch (error) {
+      console.error("Error saving transaction to profile storage:", error);
+      return false;
+    }
+  };
+
   // Load cached data on component mount
   useEffect(() => {
     const loadCachedData = () => {

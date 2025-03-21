@@ -164,9 +164,33 @@ const InsuranceModal = ({ onClose }) => {
   };
 
   const handleMaxClick = () => {
-    // Set to max coverage or user balance, whichever is lower
-    const maxAmount = Math.min(userBalance, maxCoverage);
-    setCoverageAmount(maxAmount.toString());
+    if (selectedPlan) {
+      // Set the premium amount to the selected plan's premium
+      setPremiumAmount(selectedPlan.premium.toString());
+    } else if (userBalance) {
+      // If no plan is selected but user has balance, set to max balance
+      setPremiumAmount(userBalance.toString());
+    }
+  };
+
+  // Function to save transaction to localStorage
+  const saveTransactionToProfile = (transaction) => {
+    try {
+      // Get existing transactions from localStorage
+      const existingTransactions = JSON.parse(
+        localStorage.getItem("transactions") || "[]"
+      );
+
+      // Add new transaction to the array
+      const updatedTransactions = [transaction, ...existingTransactions];
+
+      // Save back to localStorage
+      localStorage.setItem("transactions", JSON.stringify(updatedTransactions));
+
+      console.log("Transaction saved to localStorage:", transaction);
+    } catch (error) {
+      console.error("Error saving transaction to localStorage:", error);
+    }
   };
 
   const handleApplyForInsurance = async () => {
@@ -231,7 +255,7 @@ const InsuranceModal = ({ onClose }) => {
       );
 
       toast.loading("Approving token transfer...");
-      await approveTx.wait();
+      const approveReceipt = await approveTx.wait();
       toast.dismiss();
 
       // Now apply for insurance
@@ -243,8 +267,40 @@ const InsuranceModal = ({ onClose }) => {
       );
 
       toast.loading("Creating insurance policy...");
-      await insuranceTx.wait();
+      const receipt = await insuranceTx.wait();
       toast.dismiss();
+
+      // Save transaction to profile storage
+      const profileTransaction = {
+        hash: receipt.transactionHash,
+        lstBtcUsed: premium,
+        stablecoins: 0, // Not receiving stablecoins for insurance purchase
+        currency: "lstBTC",
+        status: "Active",
+        type: "Insurance Purchase",
+        description: `Purchased ${
+          selectedCoverageType.name
+        } insurance with ${premium.toFixed(
+          8
+        )} lstBTC premium for ${coverageAmount} lstBTC coverage (${duration} days)`,
+        userAddress: address,
+        timestamp: new Date().toISOString(),
+      };
+
+      saveTransactionToProfile(profileTransaction);
+
+      // Also try to use the global addTransaction function if available
+      if (
+        typeof window !== "undefined" &&
+        typeof window.addTransaction === "function"
+      ) {
+        try {
+          window.addTransaction(profileTransaction);
+          console.log("Used global addTransaction function");
+        } catch (error) {
+          console.error("Error using global addTransaction function:", error);
+        }
+      }
 
       // Success
       setIsSuccess(true);
