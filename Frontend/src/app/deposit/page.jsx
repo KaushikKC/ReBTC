@@ -14,9 +14,14 @@ import { useDataContext } from "../../context/DataContext";
 import { toast } from "react-hot-toast";
 import TimeLoader from "../components/TimeLoader";
 import Footer from "../components/Footer";
+import { SiStreamrunners } from "react-icons/si";
+import Button from "../components/Button";
+import Link from "next/link";
+import AIPreferencesModal from "../components/AIPreferencesModal";
+
 // ABI for the deposit contract
 const DEPOSIT_CONTRACT_ABI = [
-  "function depositBTC(uint256 amount) external",
+  "function dsrc/app/components/AIPreferencesModal.jsxepositBTC(uint256 amount) external",
   "function depositWETH(uint256 amount) external",
   "function btcTotaslValueLocked() external view returns (uint256)",
   "function wethTotalValueLocked() external view returns (uint256)",
@@ -55,7 +60,12 @@ function Deposit() {
   const [isLoading, setIsLoading] = useState(false);
   const [userBalances, setUserBalances] = useState({});
   const [tvl, setTvl] = useState({ btc: "0", wbtc: "0", weth: "0" });
-
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [preferences, setPreferences] = useState({
+    riskTolerance: "high",
+    profitMargin: 0.09,
+    monitoringPeriod: "1 month",
+  });
   const { ready, authenticated, user: privyUser } = usePrivy();
   const { address } = useAccount();
   const { getContractInstance } = useDataContext();
@@ -300,7 +310,20 @@ function Deposit() {
           <SqueezeButton text={"BTC Insurance Pool"} to="/insurance" />
         </div>
       </div>
+      <div className="w-full flex justify-center">
+  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => setIsModalOpen(true)}
+                    className="flex items-center justify-center gap-2 bg-gradient-to-r from-[#F7931A] to-[#2F80ED] text-white px-6 py-2 rounded-lg text-sm hover:opacity-90 transition-opacity"
+                  >
+                    <span>Create AI Agent</span>
+                    <SiStreamrunners />
 
+                  </motion.button>
+                
+  </div>
+  
       <div className="px-4 md:px-8 space-y-8 pb-5">
         {/* User Deposits Overview */}
         <UserDepositsOverview />
@@ -518,6 +541,22 @@ function Deposit() {
       <motion.footer variants={sectionVariants} className="relative z-10">
         <Footer />
       </motion.footer>
+      {isModalOpen && (
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -20 }}
+          className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50"
+        >
+          <AIPreferencesModal
+  isOpen={isModalOpen}
+  onClose={() => setIsModalOpen(false)}
+  preferences={preferences}
+  setPreferences={setPreferences}
+/>
+
+        </motion.div>
+      )}
     </div>
   );
 }

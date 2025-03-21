@@ -1,41 +1,70 @@
 "use client";
 import Image from "next/image";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import btc from "../assets/btc.svg";
-import Button from "./Button";
+import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useLogin, usePrivy, useLogout } from "@privy-io/react-auth";
 import { useAccount, useBalance } from "wagmi";
-import { useRouter } from "next/navigation";
-
 function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
   const router = useRouter();
   const { ready, authenticated, user: privyUser } = usePrivy();
   const { address } = useAccount();
   const { data } = useBalance({ address });
-
+  const pathname = usePathname(); 
   const disableLogin = !ready || (ready && authenticated);
 
   const { login } = useLogin({
     onComplete: () => {
-      router.push("/");
+      const lastRoute = sessionStorage.getItem('lastRoute') || pathname;
+      router.replace(lastRoute);
     },
     onError: (error) => {
       console.log(error);
     },
   });
 
+  // const { login } = useLogin({
+  //   onComplete: () => {
+  //     router.push("/");
+  //   },
+  //   onError: (error) => {
+  //     console.log(error);
+  //   },
+  // });
+
   const { logout } = useLogout({
     onSuccess: () => {
       router.push("/");
     },
   });
+  // Add these at the top of your component
+useEffect(() => {
+  // Persist the current route
+  if (pathname && authenticated) {
+    sessionStorage.setItem('lastRoute', pathname);
+  }
+}, [pathname, authenticated]);
 
-  const menuItems = ["DASHBOARD", "PROFILE", "ABOUT"];
+useEffect(() => {
+  // Restore the last route on refresh
+  const lastRoute = sessionStorage.getItem('lastRoute');
+  if (lastRoute && authenticated && pathname === '/') {
+    router.replace(lastRoute);
+  }
+}, [authenticated, router, pathname]);
 
+
+
+  // const menuItems = ["DASHBOARD","AI AGENT DASHBOARD", "PROFILE", "ABOUT"];
+  const menuItems = [
+    { text: "DASHBOARD", href: "/dashboard" },
+    { text: "AI AGENT DASHBOARD", href: "/ai-agent-dashboard" },
+    { text: "PROFILE", href: "/profile" },
+    { text: "ABOUT", href: "/about" }
+  ];
   const handleWalletConnect = () => {
     if (authenticated) {
       logout();
@@ -70,20 +99,42 @@ function Navbar() {
     open: { opacity: 1, x: 0 },
   };
 
-  const renderMenuItem = (item) => {
-    if (item === "CONNECT WALLET") {
-      return (
-        <Button
-          key={item}
-          text={item}
-          onClick={handleWalletConnect}
-          className="bg-[#F7931A] hover:bg-[#F7931A]/80 text-white px-4 py-2 rounded-md text-sm transition-colors duration-300"
-        />
-      );
-    }
-    return <Button key={item} text={item} className="font-['Quantify']" />;
-  };
+  // const renderMenuItem = (item) => {
+  //   if (item === "CONNECT WALLET") {
+  //     return (
+  //       <Button
+  //         key={item}
+  //         text={item}
+  //         onClick={handleWalletConnect}
+  //         className="bg-[#F7931A] hover:bg-[#F7931A]/80 text-white px-4 py-2 rounded-md text-sm transition-colors duration-300"
+  //       />
+  //     );
+  //   }
+  //   return <Button key={item} text={item} className="font-['Quantify']" />;
+  // };
 
+  const renderMenuItem = (item) => {
+    const isActive = pathname === item.href;
+    
+    return (
+      <Link href={item.href} key={item.text} className="no-underline">
+        <motion.div
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          className="group relative flex items-center gap-2 border-none bg-transparent p-0 m-0 cursor-pointer font-medium text-[20px] space-x-5 font-['Quantify']"
+        >
+          <motion.p 
+            className={`m-0 relative ${
+              isActive ? "text-[#F7931A]" : "text-white group-hover:text-[#F7931A]"
+            } transition-colors duration-300`}
+          >
+            {item.text}
+          </motion.p>
+          <div className="absolute bottom-[-7px] left-0 h-[2px] w-0 bg-[#F7931A] group-hover:w-full transition-all duration-300 ease-out" />
+        </motion.div>
+      </Link>
+    );
+  };
   // Get wallet display text
   const getWalletDisplayText = () => {
     if (authenticated && privyUser?.wallet) {
@@ -210,3 +261,4 @@ function Navbar() {
 }
 
 export default Navbar;
+
