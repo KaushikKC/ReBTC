@@ -61,7 +61,7 @@ useEffect(() => {
   // const menuItems = ["DASHBOARD","AI AGENT DASHBOARD", "PROFILE", "ABOUT"];
   const menuItems = [
     { text: "DASHBOARD", href: "/dashboard" },
-    { text: "AI AGENT DASHBOARD", href: "/ai-agent-dashboard" },
+    // { text: "AI AGENT DASHBOARD", href: "/ai-agent-dashboard" },
     { text: "PROFILE", href: "/profile" },
     { text: "ABOUT", href: "/about" }
   ];
