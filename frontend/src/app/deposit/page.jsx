@@ -446,7 +446,7 @@ function Deposit() {
           <SqueezeButton text={"BTC Insurance Pool"} to="/insurance" />
         </div>
       </div>
-      <div className="w-full flex justify-center">
+      {/* <div className="w-full flex justify-center">
         <motion.button
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
@@ -456,7 +456,7 @@ function Deposit() {
           <span>Create AI Agent</span>
           <SiStreamrunners />
         </motion.button>
-      </div>
+      </div> */}
 
       <div className="px-4 md:px-8 space-y-8 pb-5">
         {/* User Deposits Overview */}
