@@ -13,7 +13,7 @@ const notImplemented = (req, res) => {
 router.post("/", depositController.processDeposit || notImplemented);
 
 // Get user deposits
-router.get("/", depositController.getUserDeposits || notImplemented);
+router.get("/:address", depositController.getUserDeposits || notImplemented);
 
 // Get deposit stats
 router.get("/stats", depositController.getDepositStats || notImplemented);

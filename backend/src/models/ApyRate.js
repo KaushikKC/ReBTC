@@ -1,31 +1,23 @@
-module.exports = (sequelize, DataTypes) => {
-  const ApyRate = sequelize.define(
-    "ApyRate",
-    {
-      id: {
-        type: DataTypes.INTEGER,
-        primaryKey: true,
-        autoIncrement: true,
-      },
-      asset: {
-        type: DataTypes.STRING,
-        allowNull: false,
-        unique: true,
-      },
-      rate: {
-        type: DataTypes.FLOAT,
-        allowNull: false,
-        defaultValue: 0,
-      },
-      updatedBy: {
-        type: DataTypes.STRING,
-        allowNull: true,
-      },
-    },
-    {
-      timestamps: true,
-    }
-  );
+const mongoose = require("mongoose");
+const Schema = mongoose.Schema;
 
-  return ApyRate;
-};
+const ApyRateSchema = new Schema({
+  asset: {
+    type: String,
+    required: true,
+    unique: true,
+    trim: true,
+  },
+  rate: {
+    type: Number,
+    required: true,
+    default: 0,
+  },
+  updatedBy: {
+    type: String,
+  }
+}, {
+  timestamps: true
+});
+
+module.exports = mongoose.model("ApyRate", ApyRateSchema);

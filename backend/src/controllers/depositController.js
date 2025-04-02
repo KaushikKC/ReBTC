@@ -88,7 +88,10 @@ exports.processDeposit = async (req, res) => {
 // Get user deposits
 exports.getUserDeposits = async (req, res) => {
   try {
-    const { address } = req.user;
+    console.log(req.user);
+    // Check if user is authenticated
+    const address = req.params.address;
+    console.log("User address:", address);  
     const { limit = 10, offset = 0, asset } = req.query;
 
     // Build query conditions
@@ -98,6 +101,7 @@ exports.getUserDeposits = async (req, res) => {
       query.asset = asset;
     }
 
+    // Get deposits with all fields including amount and apy
     const deposits = await Deposit.find(query)
       .sort({ createdAt: -1 })
       .skip(parseInt(offset))
@@ -106,8 +110,35 @@ exports.getUserDeposits = async (req, res) => {
     // Get total count for pagination
     const totalCount = await Deposit.countDocuments(query);
 
+    // Get current APY rates for reference
+    const currentApyRates = await ApyRate.find();
+    
+    // Format the response with detailed deposit information
+    const formattedDeposits = deposits.map(deposit => {
+      const { _id, userAddress, amount, asset, txHash, status, apy, createdAt, updatedAt, withdrawalTxHash, withdrawalDate, details } = deposit;
+      
+      // Get current APY for this asset if available
+      const currentApy = currentApyRates.find(rate => rate.asset === asset)?.rate || null;
+      
+      return {
+        _id,
+        userAddress,
+        amount,
+        asset,
+        txHash,
+        status,
+        apy,
+        depositDate: createdAt,
+        updatedAt,
+        withdrawalTxHash,
+        withdrawalDate,
+        details,
+        currentApy
+      };
+    });
+
     res.status(200).json({
-      deposits,
+      deposits: formattedDeposits,
       totalCount,
       page: Math.floor(parseInt(offset) / parseInt(limit)) + 1,
       totalPages: Math.ceil(totalCount / parseInt(limit)),
