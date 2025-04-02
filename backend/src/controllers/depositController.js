@@ -88,24 +88,35 @@ exports.processDeposit = async (req, res) => {
 // Get user deposits
 exports.getUserDeposits = async (req, res) => {
   try {
-    console.log(req.user);
-    // Check if user is authenticated
-    const address = req.params.address;
-    console.log("User address:", address);  
+    console.log("Request user:", req.user);
+    
+    // Get address from params or from authenticated user
+    const address = req.params.address || (req.user && req.user.address);
+    
+    console.log("User address:", address);
+    
+    if (!address) {
+      return res.status(400).json({ error: "User address is required" });
+    }
+    
     const { limit = 10, offset = 0, asset } = req.query;
 
-    // Build query conditions
-    const query = { userAddress: address };
+    // Build query conditions - make sure to use case-insensitive comparison for address
+    const query = { userAddress: new RegExp(address, 'i') };
 
     if (asset) {
       query.asset = asset;
     }
+
+    console.log("Query:", JSON.stringify(query));
 
     // Get deposits with all fields including amount and apy
     const deposits = await Deposit.find(query)
       .sort({ createdAt: -1 })
       .skip(parseInt(offset))
       .limit(parseInt(limit));
+
+    console.log(`Found ${deposits.length} deposits`);
 
     // Get total count for pagination
     const totalCount = await Deposit.countDocuments(query);
@@ -145,7 +156,7 @@ exports.getUserDeposits = async (req, res) => {
     });
   } catch (error) {
     console.error("Error fetching deposits:", error);
-    res.status(500).json({ error: "Failed to fetch deposits" });
+    res.status(500).json({ error: "Failed to fetch deposits", details: error.message });
   }
 };
 
